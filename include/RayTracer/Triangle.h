@@ -3,7 +3,6 @@
 #include <RayTracer/Ray.h>
 #include <Eigen/Core>
 
-
 class Triangle {
 public:
 	// OpenGL coordinate
@@ -26,8 +25,8 @@ public:
 	int textureIndex;
 	Eigen::Array<Eigen::Vector2i, 3, 1> texture;
 
+	std::tuple<bool, float> hit(const Ray& r) const;
 
-	bool hit(const Ray& r) const;
 	Ray diffuse(const Ray& r) const;
 	Ray specular(const Ray& r) const;
 	Ray refract(const Ray& r) const;

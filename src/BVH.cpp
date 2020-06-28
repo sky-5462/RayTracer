@@ -20,6 +20,6 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 
 }
 
-int BVH::hit(const Ray& r) const {
-	return 0;
+std::vector<int> BVH::hit(const Ray& r) const {
+	return std::vector<int>();
 }

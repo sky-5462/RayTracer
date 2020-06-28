@@ -26,8 +26,8 @@ public:
 
 	void buildTree(const std::vector<Triangle>& triangles);
 
-	// return the index of vertex
-	int hit(const Ray& r) const;
+	// return the indics of triangles
+	std::vector<int> hit(const Ray& r) const;
 
 private:
 	Node* root;

@@ -25,5 +25,5 @@ private:
 	Camera camera;
 	BVH bvh;
 
-	Eigen::Vector3f color(int depth) const;
+	Eigen::Vector3f color(int depth, const Ray& r) const;
 };

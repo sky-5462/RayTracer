@@ -18,13 +18,67 @@ RayTracer::RayTracer(int width, int height) :
 void RayTracer::loadModel(const std::string& path) {
 	// test
 	Triangle tri;
-	tri.vertex[0] = Eigen::Vector3f(1, 0, -2);
-	tri.vertex[1] = Eigen::Vector3f(-1, 0, -2);
+	tri.vertex[0] = Eigen::Vector3f(1, -1, -2);
+	tri.vertex[1] = Eigen::Vector3f(-1, -1, -2);
 	tri.vertex[2] = Eigen::Vector3f(0, 1, -2);
 	tri.normal = Eigen::Vector3f(0, 0, 1);
 	tri.roughness = 0;
+	tri.color = Eigen::Vector3f(0.9f, 0.1f, 0.3f);
+	tri.isLightEmitting = true;
 
 	trianglesArray.push_back(tri);
+
+	tri.vertex[0] = Eigen::Vector3f(-2, -2, -2);
+	tri.vertex[1] = Eigen::Vector3f(2, -2, -2);
+	tri.vertex[2] = Eigen::Vector3f(0, -2, -10);
+	tri.normal = Eigen::Vector3f(0, 1, 0);
+	tri.color = Eigen::Vector3f(0.1f, 0.4f, 0.35f);
+
+	trianglesArray.push_back(tri);
+}
+
+Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
+	//auto indics = bvh.hit(r);
+	//if (indics.empty())
+	//	return Eigen::Vector3f(0, 0, 0);
+
+	//auto t = FLT_MAX;
+	//auto index = -1;
+	//for (auto i : indics) {
+	//	auto& tri = trianglesArray[i];
+	//	auto [didHit, temp] = tri.hit(r);
+	//	if (didHit && temp < t) {
+	//		index = i;
+	//		t = temp;
+	//	}
+	//}
+
+	//if (index == -1)
+	//	return Eigen::Vector3f(0, 0, 0);
+
+	//auto& tri = trianglesArray[index];
+	//if (tri.isLightEmitting)
+	//	return tri.color;
+
+	auto t = FLT_MAX;
+	auto index = -1;
+	for (int i = 0; i < trianglesArray.size(); ++i) {
+		auto& tri = trianglesArray[i];
+		auto [didHit, temp] = tri.hit(r);
+		if (didHit && temp < t) {
+			index = i;
+			t = temp;
+		}
+	}
+
+	if (index == -1)
+		return Eigen::Vector3f(0, 0, 0);
+
+	auto& tri = trianglesArray[index];
+	if (tri.isLightEmitting)
+		return tri.color;
+
+	return Eigen::Vector3f(0, 0, 0);
 }
 
 void RayTracer::renderOneFrame() {
@@ -32,13 +86,8 @@ void RayTracer::renderOneFrame() {
 	for (int col = 0; col < width; ++col) {
 		for (int row = 0; row < height; ++row) {
 			auto ray = camera.getRay(col, row);
-			auto& triangle = trianglesArray.front();
 
-			if (triangle.hit(ray))
-				resultImg(row, col) = Eigen::Vector3f(1, 1, 1);
-			else
-				resultImg(row, col) = Eigen::Vector3f(0, 0, 0);
-
+			resultImg(row, col) = color(0, ray);
 		}
 	}
 }
