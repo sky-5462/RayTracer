@@ -11,6 +11,6 @@ Camera::Camera(const Eigen::Vector3f& origin, const Eigen::Vector3f& direction, 
 Ray Camera::getRay(int x, int y) const {
 	Ray ray;
 	ray.origin = origin;
-	ray.direction = leftDownCorner + x * rightStep + y * upStep;
+	ray.direction = (leftDownCorner + x * rightStep + y * upStep).normalized();
 	return ray;
 }

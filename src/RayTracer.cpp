@@ -69,6 +69,7 @@ void RayTracer::outputImg() const {
 	str.fill('0');
 	str.width(3);
 	str << renderedNum;
+	stbi_flip_vertically_on_write(1);
 	stbi_write_png((prefix + str.str() + ".png").c_str(), width, height, 3, byteBuffer, 3 * width);
 	delete[] byteBuffer;
 }
