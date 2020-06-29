@@ -6,6 +6,8 @@
 #include <array>
 #include <sstream>
 
+#define MAX_RECURSIVE_DEPTH 10
+
 RayTracer::RayTracer(int width, int height) :
 	width(width),
 	height(height),
@@ -18,9 +20,9 @@ RayTracer::RayTracer(int width, int height) :
 void RayTracer::loadModel(const std::string& path) {
 	// test
 	Triangle tri;
-	tri.vertex[0] = Eigen::Vector3f(1, -1, -2);
-	tri.vertex[1] = Eigen::Vector3f(-1, -1, -2);
-	tri.vertex[2] = Eigen::Vector3f(0, 1, -2);
+	tri.vertex[0] = Eigen::Vector3f(5, -5, -10);
+	tri.vertex[1] = Eigen::Vector3f(-5, -5, -10);
+	tri.vertex[2] = Eigen::Vector3f(0, 5, -10);
 	tri.normal = Eigen::Vector3f(0, 0, 1);
 	tri.roughness = 0;
 	tri.color = Eigen::Vector3f(0.9f, 0.1f, 0.3f);
@@ -32,33 +34,15 @@ void RayTracer::loadModel(const std::string& path) {
 	tri.vertex[1] = Eigen::Vector3f(2, -2, -2);
 	tri.vertex[2] = Eigen::Vector3f(0, -2, -10);
 	tri.normal = Eigen::Vector3f(0, 1, 0);
-	tri.color = Eigen::Vector3f(0.1f, 0.4f, 0.35f);
+	tri.color = Eigen::Vector3f(0.9f, 0.9f, 0.9f);
+	tri.isLightEmitting = false;
 
 	trianglesArray.push_back(tri);
 }
 
 Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
-	//auto indics = bvh.hit(r);
-	//if (indics.empty())
-	//	return Eigen::Vector3f(0, 0, 0);
-
-	//auto t = FLT_MAX;
-	//auto index = -1;
-	//for (auto i : indics) {
-	//	auto& tri = trianglesArray[i];
-	//	auto [didHit, temp] = tri.hit(r);
-	//	if (didHit && temp < t) {
-	//		index = i;
-	//		t = temp;
-	//	}
-	//}
-
-	//if (index == -1)
-	//	return Eigen::Vector3f(0, 0, 0);
-
-	//auto& tri = trianglesArray[index];
-	//if (tri.isLightEmitting)
-	//	return tri.color;
+	if (depth >= MAX_RECURSIVE_DEPTH)
+		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
 	auto t = FLT_MAX;
 	auto index = -1;
@@ -72,13 +56,16 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 	}
 
 	if (index == -1)
-		return Eigen::Vector3f(0, 0, 0);
+		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
 	auto& tri = trianglesArray[index];
 	if (tri.isLightEmitting)
 		return tri.color;
-
-	return Eigen::Vector3f(0, 0, 0);
+	else {
+		Eigen::Vector3f hitPoint = r.origin + t * r.direction;
+		auto outRay = tri.diffuse(r, hitPoint);
+		return tri.color.cwiseProduct(color(depth + 1, outRay));
+	}
 }
 
 void RayTracer::renderOneFrame() {

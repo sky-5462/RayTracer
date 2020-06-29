@@ -1,5 +1,9 @@
 #include <RayTracer/Triangle.h>
 #include <Eigen/LU>
+#include <random>
+#include <ctime>
+
+std::mt19937 Triangle::rand = std::mt19937();
 
 std::tuple<bool, float> Triangle::hit(const Ray& r) const {
 	// get the hit point in that plane
@@ -22,4 +26,21 @@ std::tuple<bool, float> Triangle::hit(const Ray& r) const {
 		return std::make_tuple(true, x(2));
 	else
 		return std::make_tuple(false, 0.0f);
+}
+
+Ray Triangle::diffuse(const Ray& r, const Eigen::Vector3f& hitPoint) const {
+	// let the normal point to the same side with ray
+	Eigen::Vector3f tempNormal = (r.direction.dot(normal)) < 0.0f ? normal : -normal;
+
+	std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+	Eigen::Vector3f sphereCenter = hitPoint + normal;
+	Eigen::Vector3f direction = sphereCenter;
+	do {
+		direction = sphereCenter;
+		direction.x() += dist(Triangle::rand);
+		direction.y() += dist(Triangle::rand);
+		direction.z() += dist(Triangle::rand);
+	} while (direction.squaredNorm() < 1.0f);
+
+	return Ray(hitPoint, direction);
 }
