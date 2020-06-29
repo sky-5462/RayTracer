@@ -87,7 +87,13 @@ void RayTracer::renderOneFrame() {
 		for (int row = 0; row < height; ++row) {
 			auto ray = camera.getRay(col, row);
 
-			resultImg(row, col) = color(0, ray);
+			Eigen::Vector3f temp = Eigen::Vector3f::Zero();
+			for (auto& r : ray) {
+				temp += color(0, r);
+			}
+			temp /= 4.0f;
+
+			resultImg(row, col) = temp;
 		}
 	}
 }

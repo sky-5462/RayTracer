@@ -8,9 +8,19 @@ Camera::Camera(const Eigen::Vector3f& origin, const Eigen::Vector3f& direction, 
 	leftDownCorner = Eigen::Vector3f(-2, -1, -1);
 }
 
-Ray Camera::getRay(int x, int y) const {
-	Ray ray;
-	ray.origin = origin;
-	ray.direction = (leftDownCorner + x * rightStep + y * upStep).normalized();
-	return ray;
+// SSAA 4x sampling
+// 1  2
+// 3  4
+static std::array<float, 4> xOffset = { -0.25f, 0.25f, -0.25f, 0.25f };
+static std::array<float, 4> yOffset = { 0.25f, 0.25f, -0.25f, -0.25f };
+
+std::array<Ray, 4> Camera::getRay(int x, int y) const {
+	std::array<Ray, 4> result;
+	for (int i = 0; i < 4; ++i) {
+		result[i].origin = origin;
+		auto xTemp = x + xOffset[i];
+		auto yTemp = y + yOffset[i];
+		result[i].direction = (leftDownCorner + xTemp * rightStep + yTemp * upStep).normalized();
+	}
+	return result;
 }
