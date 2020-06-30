@@ -33,6 +33,6 @@ public:
 	std::tuple<bool, float> hit(const Ray& r) const;
 
 	std::vector<Ray> diffuse(const Ray& r, const Eigen::Vector3f& hitPoint) const;
-	Ray specular(const Ray& r) const;
+	Ray specular(const Ray& r, const Eigen::Vector3f& hitPoint) const;
 	Ray refract(const Ray& r) const;
 };

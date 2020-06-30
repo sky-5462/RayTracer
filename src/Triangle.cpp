@@ -54,3 +54,10 @@ std::vector<Ray> Triangle::diffuse(const Ray& r, const Eigen::Vector3f& hitPoint
 
 	return result;
 }
+
+Ray Triangle::specular(const Ray& r, const Eigen::Vector3f& hitPoint) const {
+	// output direction must be a unit vector
+	auto normalProjection = r.direction.dot(normal);
+	Eigen::Vector3f out = r.direction - (2.0f * normalProjection) * normal;
+	return Ray(hitPoint, out);
+}

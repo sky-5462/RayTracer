@@ -24,7 +24,6 @@ void RayTracer::loadModel(const std::string& path) {
 	tri.vertex[1] = Eigen::Vector3f(-5, -5, -10);
 	tri.vertex[2] = Eigen::Vector3f(0, 5, -10);
 	tri.normal = Eigen::Vector3f(0, 0, 1);
-	tri.roughness = 0;
 	tri.color = Eigen::Vector3f(0.9f, 0.1f, 0.3f);
 	tri.isLightEmitting = true;
 
@@ -36,6 +35,7 @@ void RayTracer::loadModel(const std::string& path) {
 	tri.normal = Eigen::Vector3f(0, 1, 0);
 	tri.color = Eigen::Vector3f(0.9f, 0.9f, 0.9f);
 	tri.isLightEmitting = false;
+	tri.roughness = 0.5f;
 
 	trianglesArray.push_back(tri);
 }
@@ -63,13 +63,18 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 		return tri.color;
 	else {
 		Eigen::Vector3f hitPoint = r.origin + t * r.direction;
+
 		auto diffuseOut = tri.diffuse(r, hitPoint);
 		Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
 		for (int i = 0; i < diffuseOut.size(); ++i) {
 			diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
 		}
 		diffuseColor /= static_cast<float>(diffuseOut.size());
-		return diffuseColor;
+
+		auto specularOut = tri.specular(r, hitPoint);
+		Eigen::Vector3f specularColor = tri.color.cwiseProduct(color(depth + 1, specularOut));
+
+		return tri.roughness * diffuseColor + (1 - tri.roughness) * specularColor;
 	}
 }
 
