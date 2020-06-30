@@ -63,8 +63,13 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 		return tri.color;
 	else {
 		Eigen::Vector3f hitPoint = r.origin + t * r.direction;
-		auto outRay = tri.diffuse(r, hitPoint);
-		return tri.color.cwiseProduct(color(depth + 1, outRay));
+		auto diffuseOut = tri.diffuse(r, hitPoint);
+		Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
+		for (int i = 0; i < diffuseOut.size(); ++i) {
+			diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
+		}
+		diffuseColor /= static_cast<float>(diffuseOut.size());
+		return diffuseColor;
 	}
 }
 

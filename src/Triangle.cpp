@@ -3,6 +3,8 @@
 #include <random>
 #include <ctime>
 
+#define DIFFUSE_RAY_NUM 10
+
 std::mt19937 Triangle::rand = std::mt19937();
 
 std::tuple<bool, float> Triangle::hit(const Ray& r) const {
@@ -28,19 +30,27 @@ std::tuple<bool, float> Triangle::hit(const Ray& r) const {
 		return std::make_tuple(false, 0.0f);
 }
 
-Ray Triangle::diffuse(const Ray& r, const Eigen::Vector3f& hitPoint) const {
+std::vector<Ray> Triangle::diffuse(const Ray& r, const Eigen::Vector3f& hitPoint) const {
 	// let the normal point to the same side with ray
 	Eigen::Vector3f tempNormal = (r.direction.dot(normal)) < 0.0f ? normal : -normal;
 
 	std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-	Eigen::Vector3f sphereCenter = hitPoint + normal;
-	Eigen::Vector3f direction = sphereCenter;
-	do {
-		direction = sphereCenter;
-		direction.x() += dist(Triangle::rand);
-		direction.y() += dist(Triangle::rand);
-		direction.z() += dist(Triangle::rand);
-	} while (direction.squaredNorm() < 1.0f);
+	Eigen::Vector3f sphereCenter = hitPoint + tempNormal;
+	Eigen::Vector3f direction;
+	std::vector<Ray> result;
+	result.reserve(DIFFUSE_RAY_NUM);
 
-	return Ray(hitPoint, direction);
+	for (int i = 0; i < DIFFUSE_RAY_NUM; ++i) {
+		do {
+			direction = sphereCenter;
+			direction.x() += dist(Triangle::rand);
+			direction.y() += dist(Triangle::rand);
+			direction.z() += dist(Triangle::rand);
+		} while (direction.squaredNorm() < 1.0f);
+
+		direction.normalize();
+		result.push_back(Ray(hitPoint, direction));
+	}
+
+	return result;
 }
