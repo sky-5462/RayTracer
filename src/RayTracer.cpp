@@ -12,7 +12,7 @@
 RayTracer::RayTracer(int width, int height) :
 	width(width),
 	height(height),
-	resultImg(height, width),
+	accumulateImg(height, width),
 	tempImg(height, width),
 	camera(Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), 90, width, height),
 	renderedNum(0) {
@@ -125,7 +125,6 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 }
 
 void RayTracer::renderOneFrame() {
-	// test
 	for (int col = 0; col < width; ++col) {
 		for (int row = 0; row < height; ++row) {
 			auto ray = camera.getRay(col, row);
@@ -136,9 +135,12 @@ void RayTracer::renderOneFrame() {
 			}
 			temp /= 4.0f;
 
-			resultImg(row, col) = temp;
+			tempImg(row, col) = temp;
 		}
 	}
+
+	renderedNum++;
+	accumulateImg += tempImg;
 }
 
 int RayTracer::getRenderedNum() const {
@@ -151,7 +153,7 @@ void RayTracer::outputImg() const {
 	for (int col = 0; col < width; ++col) {
 		for (int row = 0; row < height; ++row) {
 			for (int k = 0; k < 3; ++k) {
-				int temp = static_cast<int>(resultImg(row, col)(k) * 255.0f);
+				int temp = static_cast<int>(accumulateImg(row, col)(k) *(255.0f / renderedNum));
 				if (temp > 255)
 					temp = 255;
 				else if (temp < 0)
@@ -170,4 +172,11 @@ void RayTracer::outputImg() const {
 	stbi_flip_vertically_on_write(1);
 	stbi_write_png((prefix + str.str() + ".png").c_str(), width, height, 3, byteBuffer, 3 * width);
 	delete[] byteBuffer;
+}
+
+void RayTracer::render(int frames) {
+	for (int i = 0; i < frames; ++i) {
+		renderOneFrame();
+		outputImg();
+	}
 }

@@ -3,6 +3,5 @@
 int main() {
 	RayTracer tracer(400, 200);
 	tracer.loadModel("test");
-	tracer.renderOneFrame();
-	tracer.outputImg();
+	tracer.render(20);
 }
