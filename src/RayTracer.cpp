@@ -14,8 +14,7 @@ RayTracer::RayTracer(int width, int height) :
 	height(height),
 	accumulateImg(height, width),
 	tempImg(height, width),
-	camera(Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), 90, width, height),
-	renderedNum(0) {
+	camera(Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), 90, width, height) {
 }
 
 void RayTracer::loadModel(const std::string& path) {
@@ -139,44 +138,40 @@ void RayTracer::renderOneFrame() {
 		}
 	}
 
-	renderedNum++;
 	accumulateImg += tempImg;
 }
 
-int RayTracer::getRenderedNum() const {
-	return renderedNum;
-}
-
-void RayTracer::outputImg() const {
-	auto byteBuffer = new uint8_t[width * height * 3];
-	// convert float to uint8_t
+void RayTracer::render(int frames) {
 	for (int col = 0; col < width; ++col) {
 		for (int row = 0; row < height; ++row) {
-			for (int k = 0; k < 3; ++k) {
-				int temp = static_cast<int>(accumulateImg(row, col)(k) *(255.0f / renderedNum));
-				if (temp > 255)
-					temp = 255;
-				else if (temp < 0)
-					temp = 0;
-
-				byteBuffer[row * (3 * width) + col * 3 + k] = temp;
-			}
+			accumulateImg(row, col) = Eigen::Vector3f::Zero();
 		}
 	}
 
-	auto prefix = std::string("out_");
-	std::stringstream str;
-	str.fill('0');
-	str.width(3);
-	str << renderedNum;
+	auto byteBuffer = new uint8_t[width * height * 3];
 	stbi_flip_vertically_on_write(1);
-	stbi_write_png((prefix + str.str() + ".png").c_str(), width, height, 3, byteBuffer, 3 * width);
-	delete[] byteBuffer;
-}
 
-void RayTracer::render(int frames) {
-	for (int i = 0; i < frames; ++i) {
+	for (int i = 1; i <= frames; ++i) {
 		renderOneFrame();
-		outputImg();
+
+		// convert float to uint8_t
+		for (int col = 0; col < width; ++col) {
+			for (int row = 0; row < height; ++row) {
+				for (int k = 0; k < 3; ++k) {
+					int temp = static_cast<int>(accumulateImg(row, col)(k) * (255.0f / i));
+					if (temp > 255)
+						temp = 255;
+					else if (temp < 0)
+						temp = 0;
+
+					byteBuffer[row * (3 * width) + col * 3 + k] = temp;
+				}
+			}
+		}
+
+		stbi_write_png("out.png", width, height, 3, byteBuffer, 3 * width);
+		std::cout << "Output frame " << i << '\n';
 	}
+	delete[] byteBuffer;
+	std::cout << "Render finished" << std::endl;
 }
