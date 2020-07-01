@@ -30,9 +30,14 @@ public:
 
 	static std::mt19937 rand;
 
-	std::tuple<bool, float> hit(const Ray& r) const;
+	std::pair<bool, float> hit(const Ray& r) const;
 
+	// generate multiple rays
 	std::vector<Ray> diffuse(const Ray& r, const Eigen::Vector3f& hitPoint) const;
+
+	// exact specular reflection
 	Ray specular(const Ray& r, const Eigen::Vector3f& hitPoint) const;
-	Ray refract(const Ray& r) const;
+
+	// return the proportion of refraction and the corresponding ray
+	std::pair<float, Ray> refract(const Ray& r, const Eigen::Vector3f& hitPoint) const;
 };

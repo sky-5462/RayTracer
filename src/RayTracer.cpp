@@ -5,6 +5,7 @@
 
 #include <array>
 #include <sstream>
+#include <iostream>
 
 #define MAX_RECURSIVE_DEPTH 10
 
@@ -26,6 +27,7 @@ void RayTracer::loadModel(const std::string& path) {
 	tri.normal = Eigen::Vector3f(0, 0, 1);
 	tri.color = Eigen::Vector3f(0.9f, 0.1f, 0.3f);
 	tri.isLightEmitting = true;
+	tri.isTransparent = false;
 
 	trianglesArray.push_back(tri);
 
@@ -36,6 +38,18 @@ void RayTracer::loadModel(const std::string& path) {
 	tri.color = Eigen::Vector3f(0.9f, 0.9f, 0.9f);
 	tri.isLightEmitting = false;
 	tri.roughness = 0.5f;
+
+	trianglesArray.push_back(tri);
+
+	tri.vertex[0] = Eigen::Vector3f(5, 2, -7);
+	tri.vertex[1] = Eigen::Vector3f(-5, 2, -7);
+	tri.vertex[2] = Eigen::Vector3f(0, 7, -7);
+	tri.normal = Eigen::Vector3f(0, 0, 1);
+	tri.color = Eigen::Vector3f(1.0f, 1.0f, 1.0f);
+	tri.isLightEmitting = false;
+	tri.roughness = 0.0f;
+	tri.isTransparent = true;
+	tri.refractiveIndex = 1.5f;
 
 	trianglesArray.push_back(tri);
 }
@@ -64,17 +78,49 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 	else {
 		Eigen::Vector3f hitPoint = r.origin + t * r.direction;
 
-		auto diffuseOut = tri.diffuse(r, hitPoint);
-		Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
-		for (int i = 0; i < diffuseOut.size(); ++i) {
-			diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
+		Eigen::Vector3f refractColor = Eigen::Vector3f::Zero();
+		float refractProportion = 0.0f;
+		if (tri.isTransparent) {
+			Ray refractOut;
+			std::tie(refractProportion, refractOut) = tri.refract(r, hitPoint);
+
+			if (refractProportion > 0.01f)
+				refractColor = color(depth + 1, refractOut);
+			else
+				refractProportion = 0.0f;
+
+			if (refractProportion > 0.99f)
+				return refractColor;
 		}
-		diffuseColor /= static_cast<float>(diffuseOut.size());
 
-		auto specularOut = tri.specular(r, hitPoint);
-		Eigen::Vector3f specularColor = tri.color.cwiseProduct(color(depth + 1, specularOut));
+		Eigen::Vector3f reflectColor;
+		if (tri.roughness > 0.99f) {
+			auto diffuseOut = tri.diffuse(r, hitPoint);
+			Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
+			for (int i = 0; i < diffuseOut.size(); ++i) {
+				diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
+			}
+			reflectColor = diffuseColor / static_cast<float>(diffuseOut.size());
+		}
+		else if (tri.roughness < 0.01f) {
+			auto specularOut = tri.specular(r, hitPoint);
+			reflectColor = tri.color.cwiseProduct(color(depth + 1, specularOut));
+		}
+		else {
+			auto diffuseOut = tri.diffuse(r, hitPoint);
+			Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
+			for (int i = 0; i < diffuseOut.size(); ++i) {
+				diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
+			}
+			diffuseColor /= static_cast<float>(diffuseOut.size());
 
-		return tri.roughness * diffuseColor + (1 - tri.roughness) * specularColor;
+			auto specularOut = tri.specular(r, hitPoint);
+			Eigen::Vector3f specularColor = tri.color.cwiseProduct(color(depth + 1, specularOut));
+
+			reflectColor = tri.roughness * diffuseColor + (1 - tri.roughness) * specularColor;
+		}
+
+		return refractProportion * refractColor + (1.0f - refractProportion) * reflectColor;
 	}
 }
 
