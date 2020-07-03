@@ -57,19 +57,20 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 	if (depth >= MAX_RECURSIVE_DEPTH)
 		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
+	auto hitList = bvh.hit(r);
+	if (hitList.empty())
+		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
+
 	auto t = FLT_MAX;
 	auto index = -1;
-	for (int i = 0; i < trianglesArray.size(); ++i) {
-		auto& tri = trianglesArray[i];
+	for (int i = 0; i < hitList.size(); ++i) {
+		auto& tri = trianglesArray[hitList[i]];
 		auto [didHit, temp] = tri.hit(r);
 		if (didHit && temp < t) {
-			index = i;
+			index = hitList[i];
 			t = temp;
 		}
 	}
-
-	if (index == -1)
-		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
 
 	auto& tri = trianglesArray[index];
 	if (tri.isLightEmitting)
@@ -124,6 +125,31 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 }
 
 void RayTracer::renderOneFrame() {
+	//int col = 100, row = 200;
+	//auto ray = camera.getRay(col, row);
+
+	//Eigen::Vector3f temp = Eigen::Vector3f::Zero();
+	//for (auto& r : ray) {
+	//	temp += color(0, r);
+	//}
+	//temp /= 4.0f;
+
+	//tempImg(row, col) = temp;
+
+	//for (int col = 195; col < 205; ++col) {
+	//	for (int row = 95; row < 105; ++row) {
+	//		auto ray = camera.getRay(col, row);
+
+	//		Eigen::Vector3f temp = Eigen::Vector3f::Zero();
+	//		for (auto& r : ray) {
+	//			temp += color(0, r);
+	//		}
+	//		temp /= 4.0f;
+
+	//		tempImg(row, col) = temp;
+	//	}
+	//}
+
 	for (int col = 0; col < width; ++col) {
 		for (int row = 0; row < height; ++row) {
 			auto ray = camera.getRay(col, row);
@@ -151,6 +177,7 @@ void RayTracer::render(int frames) {
 	auto byteBuffer = new uint8_t[width * height * 3];
 	stbi_flip_vertically_on_write(1);
 
+	bvh.buildTree(trianglesArray);
 	for (int i = 1; i <= frames; ++i) {
 		renderOneFrame();
 

@@ -4,7 +4,13 @@
 #include <RayTracer/Ray.h>
 #include <vector>
 
-struct AABB {
+class AABB {
+public:
+	AABB(const Eigen::Vector3f& min, const Eigen::Vector3f& max);
+	float squareDistance(const AABB& rhs) const;
+	AABB conbine(const AABB& rhs) const;
+	bool hit(const Ray& r) const;
+private:
 	Eigen::Vector3f min;
 	Eigen::Vector3f max;
 };
@@ -15,7 +21,8 @@ struct Node {
 	Node* left;
 	Node* right;
 
-	Node();
+	Node(int index, const AABB& aabb);
+	Node(const AABB& aabb, Node* left, Node* right);
 	~Node();
 };
 
