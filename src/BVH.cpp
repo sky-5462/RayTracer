@@ -109,17 +109,16 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 }
 
 void recursiveCheck(std::vector<int>& result, const Node* node, const Ray& r) {
+	// don't need to check aabb for a single triangle, since we have a triangle check
+	if (node->left == nullptr && node->right == nullptr) {
+		result.push_back(node->vertexIndex);
+	}
 	auto hasHit = node->aabb.hit(r);
 	if (hasHit) {
-		if (node->left == nullptr && node->right == nullptr) {
-			result.push_back(node->vertexIndex);
-		}
-		else {
-			if (node->left != nullptr)
-				recursiveCheck(result, node->left, r);
-			if (node->right != nullptr)
-				recursiveCheck(result, node->right, r);
-		}
+		if (node->left != nullptr)
+			recursiveCheck(result, node->left, r);
+		if (node->right != nullptr)
+			recursiveCheck(result, node->right, r);
 	}
 }
 
