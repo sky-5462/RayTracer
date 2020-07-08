@@ -2,30 +2,33 @@
 #include <Eigen/QR>
 #include <random>
 
-float Triangle::hit(const Ray& r) const {
+std::pair<float, Eigen::Vector3f> Triangle::hit(const Ray& r) const {
 	// get the hit point in that plane
-	float temp = normal.dot(vertex(0) - r.origin);
-	float t = temp / normal.dot(r.direction);
+	float temp = planeNormal.dot(vertexPosition(0) - r.origin);
+	float t = temp / planeNormal.dot(r.direction);
 	// negative t means go backwards and 0 means hit the origin itselt, need to exclude them
 	// produce NaN if the ray is in that plane, but still get a false
 	if (t > 0.001f) {
 		Eigen::Matrix<float, 3, 2> matrix;
-		matrix.col(0) = vertex(0) - vertex(2);
-		matrix.col(1) = vertex(1) - vertex(2);
+		matrix.col(0) = vertexPosition(0) - vertexPosition(2);
+		matrix.col(1) = vertexPosition(1) - vertexPosition(2);
 		Eigen::Vector3f hitPoint = r.origin + t * r.direction;
-		Eigen::Vector2f x = matrix.householderQr().solve(hitPoint - vertex(2));
+		Eigen::Vector2f x = matrix.householderQr().solve(hitPoint - vertexPosition(2));
 		float alpha = x(0);
 		float beta = x(1);
-		if (0.0f <= alpha && alpha <= 1.0f && 0.0f <= beta && beta <= 1.0f && alpha + beta <= 1.0f)
-			return t;
+		if (0.0f <= alpha && alpha <= 1.0f && 0.0f <= beta && beta <= 1.0f && alpha + beta <= 1.0f) {
+			Eigen::Vector3f normal = alpha * vertexNormal(0) + beta * vertexNormal(1) +
+				(1.0f - (alpha + beta)) * vertexNormal(2);
+			return std::make_pair(t, normal.normalized());
+		}
 		else
-			return FLT_MAX;
+			return std::make_pair(FLT_MAX, Eigen::Vector3f());
 	}
 	else
-		return FLT_MAX;
+		return std::make_pair(FLT_MAX, Eigen::Vector3f());
 }
 
-std::vector<Eigen::Vector3f> Triangle::diffuse(const Ray& r, const Eigen::Vector3f& hitPoint, int rayNum) const {
+std::vector<Eigen::Vector3f> Triangle::diffuse(const Eigen::Vector3f& normal, const Ray& r, const Eigen::Vector3f& hitPoint, int rayNum) const {
 	thread_local static std::mt19937 rand;
 	thread_local static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
@@ -51,14 +54,14 @@ std::vector<Eigen::Vector3f> Triangle::diffuse(const Ray& r, const Eigen::Vector
 	return result;
 }
 
-Eigen::Vector3f Triangle::specular(const Ray& r) const {
+Eigen::Vector3f Triangle::specular(const Eigen::Vector3f& normal, const Ray& r) const {
 	// output direction must be a unit vector
 	float normalProjection = r.direction.dot(normal);
 	return r.direction - (2.0f * normalProjection) * normal;
 }
 
 // refer to: https://graphicscompendium.com/raytracing/10-reflection-refraction
-std::pair<float, Eigen::Vector3f> Triangle::refract(const Ray& r) const {
+std::pair<float, Eigen::Vector3f> Triangle::refract(const Eigen::Vector3f& normal, const Ray& r) const {
 	float dot = r.direction.dot(normal);
 
 	// outer index / inner index

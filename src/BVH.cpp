@@ -42,7 +42,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 		Eigen::Vector3f tempMin(FLT_MAX, FLT_MAX, FLT_MAX);
 		Eigen::Vector3f tempMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 
-		const auto& vertex = triangles[i].vertex;
+		const auto& vertex = triangles[i].vertexPosition;
 		for (int j = 0; j < 3; ++j) {
 			tempMin = tempMin.cwiseMin(vertex(j));
 			tempMax = tempMax.cwiseMax(vertex(j));
@@ -94,7 +94,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			max = Eigen::Vector3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 			for (int i = start; i < splitStart; ++i) {
 				int index = leafList[i]->vertexIndex;
-				const auto& vertex = triangles[index].vertex;
+				const auto& vertex = triangles[index].vertexPosition;
 				for (int j = 0; j < 3; ++j) {
 					min = min.cwiseMin(vertex(j));
 					max = max.cwiseMax(vertex(j));
@@ -108,7 +108,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			max = Eigen::Vector3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 			for (int i = splitStart; i < end; ++i) {
 				int index = leafList[i]->vertexIndex;
-				const auto& vertex = triangles[index].vertex;
+				const auto& vertex = triangles[index].vertexPosition;
 				for (int j = 0; j < 3; ++j) {
 					min = min.cwiseMin(vertex(j));
 					max = max.cwiseMax(vertex(j));

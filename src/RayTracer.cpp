@@ -60,21 +60,22 @@ void RayTracer::loadModel(const std::string& path) {
 		if (mesh->mPrimitiveTypes != aiPrimitiveType_TRIANGLE)
 			continue;
 
-		auto faceNum = mesh->mNumFaces;
+		unsigned faceNum = mesh->mNumFaces;
 		for (unsigned j = 0; j < faceNum; ++j) {
-			auto face = mesh->mFaces[j];
+			const auto& face = mesh->mFaces[j];
 			Triangle tri;
 			for (int k = 0; k < 3; ++k) {
-				auto index = face.mIndices[k];
-				auto vertex = mesh->mVertices[index];
-				tri.vertex(k) = Eigen::Vector3f(vertex.x, vertex.y, vertex.z);
-				//auto vertexNormal = mesh->mNormals[index];
+				unsigned index = face.mIndices[k];
+				const auto& vertex = mesh->mVertices[index];
+				tri.vertexPosition(k) = Eigen::Vector3f(vertex.x, vertex.y, vertex.z);
+				const auto& normal = mesh->mNormals[index];
+				tri.vertexNormal(k) = Eigen::Vector3f(normal.x, normal.y, normal.z);
 			}
-			tri.normal = (tri.vertex(1) - tri.vertex(0)).cross(tri.vertex(2) - tri.vertex(0)).normalized();
+			tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
 			tri.color = Eigen::Vector3f(0.8f, 0.8f, 0.8f);
 			tri.isLightEmitting = false;
 			tri.isTransparent = false;
-			tri.roughness = 0.1f;
+			tri.roughness = 0.5f;
 			tri.refractiveIndex = 1.5f;
 			trianglesArray.push_back(tri);
 		}
@@ -86,10 +87,10 @@ void RayTracer::addLighting(float x0, float y0, float z0,
 							float x2, float y2, float z2,
 							float r, float g, float b) {
 	Triangle tri;
-	tri.vertex[0] = Eigen::Vector3f(x0, y0, z0);
-	tri.vertex[1] = Eigen::Vector3f(x1, y1, z1);
-	tri.vertex[2] = Eigen::Vector3f(x2, y2, z2);
-	tri.normal = (tri.vertex(1) - tri.vertex(0)).cross(tri.vertex(2) - tri.vertex(0)).normalized();
+	tri.vertexPosition[0] = Eigen::Vector3f(x0, y0, z0);
+	tri.vertexPosition[1] = Eigen::Vector3f(x1, y1, z1);
+	tri.vertexPosition[2] = Eigen::Vector3f(x2, y2, z2);
+	tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
 	tri.color = Eigen::Vector3f(r, g, b);
 	tri.isLightEmitting = true;
 	trianglesArray.push_back(tri);
@@ -99,18 +100,20 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 	if (depth >= maxRecursionDepth)
 		return backgroundColor;
 
-	auto hitList = bvh.hit(r);
+	const auto& hitList = bvh.hit(r);
 	if (hitList.empty())
 		return backgroundColor;
 
-	auto t = FLT_MAX;
-	auto index = -1;
+	float t = FLT_MAX;
+	int index = -1;
+	Eigen::Vector3f normal;
 	for (int i = 0; i < hitList.size(); ++i) {
-		auto& tri = trianglesArray[hitList[i]];
-		float temp = tri.hit(r);
+		const auto& tri = trianglesArray[hitList[i]];
+		const auto& [temp, normalTemp] = tri.hit(r);
 		if (temp < t) {
 			index = hitList[i];
 			t = temp;
+			normal = normalTemp;
 		}
 	}
 
@@ -118,7 +121,7 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 	if (index == -1)
 		return backgroundColor;
 
-	auto& tri = trianglesArray[index];
+	const auto& tri = trianglesArray[index];
 	if (tri.isLightEmitting)
 		return tri.color;
 	else {
@@ -128,7 +131,7 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 		float refractProportion = 0.0f;
 		if (tri.isTransparent) {
 			Eigen::Vector3f refractOut;
-			std::tie(refractProportion, refractOut) = tri.refract(r);
+			std::tie(refractProportion, refractOut) = tri.refract(normal, r);
 
 			if (refractProportion > 0.01f)
 				refractColor = color(depth + 1, Ray(hitPoint, refractOut));
@@ -141,7 +144,7 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 
 		Eigen::Vector3f reflectColor;
 		if (tri.roughness > 0.99f) {
-			const auto& diffuseOutRay = tri.diffuse(r, hitPoint, diffuseRayNum);
+			const auto& diffuseOutRay = tri.diffuse(normal, r, hitPoint, diffuseRayNum);
 			Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
 			for (int i = 0; i < diffuseRayNum; ++i) {
 				diffuseColor += tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, diffuseOutRay[i])));
@@ -149,18 +152,18 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 			reflectColor = diffuseColor / static_cast<float>(diffuseRayNum);
 		}
 		else if (tri.roughness < 0.01f) {
-			const auto& specularOutRay = tri.specular(r);
+			const auto& specularOutRay = tri.specular(normal, r);
 			reflectColor = tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, specularOutRay)));
 		}
 		else {
-			const auto& diffuseOutRay = tri.diffuse(r, hitPoint, diffuseRayNum);
+			const auto& diffuseOutRay = tri.diffuse(normal, r, hitPoint, diffuseRayNum);
 			Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
 			for (int i = 0; i < diffuseRayNum; ++i) {
 				diffuseColor += tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, diffuseOutRay[i])));
 			}
 			diffuseColor /= static_cast<float>(diffuseRayNum);
 
-			const auto& specularOutRay = tri.specular(r);
+			const auto& specularOutRay = tri.specular(normal, r);
 			Eigen::Vector3f specularColor = tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, specularOutRay)));
 
 			reflectColor = tri.roughness * diffuseColor + (1.0f - tri.roughness) * specularColor;
