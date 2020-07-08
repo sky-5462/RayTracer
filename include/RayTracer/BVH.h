@@ -3,39 +3,34 @@
 #include <RayTracer/Triangle.h>
 #include <RayTracer/Ray.h>
 #include <vector>
+#include <memory>
 
 class AABB {
 public:
 	AABB(const Eigen::Vector3f& min, const Eigen::Vector3f& max);
-	float squareDistance(const AABB& rhs) const;
-	AABB conbine(const AABB& rhs) const;
 	bool hit(const Ray& r) const;
-private:
+
 	Eigen::Vector3f min;
 	Eigen::Vector3f max;
+	Eigen::Vector3f center;
 };
 
-struct Node {
+struct TreeNode {
 	AABB aabb;
+	std::unique_ptr<TreeNode> left;
+	std::unique_ptr<TreeNode> right;
 	int vertexIndex;
-	Node* left;
-	Node* right;
 
-	Node(int index, const AABB& aabb);
-	Node(const AABB& aabb, Node* left, Node* right);
-	~Node();
+	TreeNode(int vertexIndex, const Eigen::Vector3f& min, const Eigen::Vector3f& max);
 };
 
 class BVH {
 public:
-	BVH();
-	~BVH();
-
 	void buildTree(const std::vector<Triangle>& triangles);
 
 	// return the indics of triangles
 	std::vector<int> hit(const Ray& r) const;
 
 private:
-	Node* root;
+	std::unique_ptr<TreeNode> root;
 };

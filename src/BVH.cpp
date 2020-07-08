@@ -1,31 +1,17 @@
 #include <RayTracer/BVH.h>
-#include <list>
+#include <algorithm>
+#include <stack>
 
-AABB::AABB(const Eigen::Vector3f& min, const Eigen::Vector3f& max) : min(min), max(max) {}
-
-float AABB::squareDistance(const AABB& rhs) const {
-	Eigen::Vector3f leftCenter = (min + max) / 2.0f;
-	Eigen::Vector3f rightCenter = (rhs.min + rhs.max) / 2.0f;
-	Eigen::Vector3f diff = leftCenter - rightCenter;
-	auto squareDist = diff.dot(diff);
-	return squareDist;
-}
-
-AABB AABB::conbine(const AABB& rhs) const {
-	auto bigger = *this;
-	for (int j = 0; j < 3; ++j) {
-		bigger.min(j) = fminf(bigger.min(j), rhs.min(j));
-		bigger.max(j) = fmaxf(bigger.max(j), rhs.max(j));
-	}
-	return bigger;
+AABB::AABB(const Eigen::Vector3f& min, const Eigen::Vector3f& max) :
+	min(min), max(max), center((min + max) * 0.5f) {
 }
 
 bool AABB::hit(const Ray& r) const {
-	auto tmin = 0.0f, tmax = FLT_MAX;
+	float tmin = 0.0f, tmax = FLT_MAX;
 	for (int i = 0; i < 3; i++) {
-		auto invD = 1.0f / r.direction(i);
-		auto t0 = (min(i) - r.origin(i)) * invD;
-		auto t1 = (max(i) - r.origin(i)) * invD;
+		float invD = 1.0f / r.direction(i);
+		float t0 = (min(i) - r.origin(i)) * invD;
+		float t1 = (max(i) - r.origin(i)) * invD;
 		if (invD < 0.0f)
 			std::swap(t0, t1);
 		tmin = fmaxf(t0, tmin);
@@ -37,96 +23,125 @@ bool AABB::hit(const Ray& r) const {
 	return true;
 }
 
-Node::Node(int index, const AABB& aabb) : vertexIndex(index), aabb(aabb), left(nullptr), right(nullptr) {}
-
-Node::Node(const AABB& aabb, Node* left, Node* right) : vertexIndex(-1), aabb(aabb), left(left), right(right) {}
-
-Node::~Node() {
-	if (left != nullptr)
-		delete left;
-	if (right != nullptr)
-		delete right;
-}
-
-BVH::BVH() : root(nullptr) {}
-
-BVH::~BVH() {
-	if (root != nullptr)
-		delete root;
+TreeNode::TreeNode(int index, const Eigen::Vector3f& min, const Eigen::Vector3f& max) :
+	vertexIndex(index), aabb(min, max) {
 }
 
 void BVH::buildTree(const std::vector<Triangle>& triangles) {
+	if (triangles.empty())
+		return;
+
+	// for all triangles
+	Eigen::Vector3f min(FLT_MAX, FLT_MAX, FLT_MAX);
+	Eigen::Vector3f max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
 	// leaf nodes
-	std::list<Node*> initialList;
+	std::vector<std::unique_ptr<TreeNode>> leafList(triangles.size());
 	for (int i = 0; i < triangles.size(); ++i) {
-		auto& vertex = triangles[i].vertex;
-		Eigen::Vector3f min = vertex(0);
-		Eigen::Vector3f max = vertex(0);
-		// vertex
-		for (int j = 1; j < 3; ++j) {
-			// coordinate
-			for (int k = 0; k < 3; ++k) {
-				auto num = vertex(j)(k);
-				min(k) = fminf(min(k), num);
-				max(k) = fmaxf(max(k), num);
+		// for one triangle
+		Eigen::Vector3f tempMin(FLT_MAX, FLT_MAX, FLT_MAX);
+		Eigen::Vector3f tempMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+
+		const auto& vertex = triangles[i].vertex;
+		for (int j = 0; j < 3; ++j) {
+			tempMin = tempMin.cwiseMin(vertex(j));
+			tempMax = tempMax.cwiseMax(vertex(j));
+			min = min.cwiseMin(vertex(j));
+			max = max.cwiseMax(vertex(j));
+		}
+
+		leafList[i] = std::make_unique<TreeNode>(i, tempMin, tempMax);
+	}
+
+	// build tree
+	root = std::make_unique<TreeNode>(-1, min, max);
+	std::stack<std::tuple<TreeNode*, int, int>> s;
+	s.push(std::make_tuple(root.get(), 0, static_cast<int>(triangles.size())));
+	do {
+		auto [node, start, end] = s.top();
+		s.pop();
+		if (end - start <= 2) {
+			// must have one element
+			node->left = std::move(leafList[start]);
+			// may have two
+			if (end - start == 2) {
+				node->right = std::move(leafList[start + 1]);
 			}
 		}
-
-		initialList.push_back(new Node(i, AABB(min, max)));
-	}
-
-	// each iteration connect two nearest nodes
-	for (int i = 0; i < triangles.size() - 1; ++i) {
-		auto minLeftIt = initialList.begin();
-		auto minRightIt = minLeftIt;
-		auto min = FLT_MAX;
-
-		// search the nearest nodes
-		auto leftIt = minLeftIt;
-		for (int j = 0; j < initialList.size() - 1; ++j) {
-			auto rightIt = leftIt;
-			++rightIt;
-			do {
-				auto squareDist = (*leftIt)->aabb.squareDistance((*rightIt)->aabb);
-				if (squareDist < min) {
-					min = squareDist;
-					minLeftIt = leftIt;
-					minRightIt = rightIt;
+		else {
+			// find the longest axis
+			const auto& aabb = node->aabb;
+			float axisLength = aabb.max(0) - aabb.min(0);
+			int selectedAxis = 0;
+			for (int i = 1; i < 3; ++i) {
+				if (aabb.max(i) - aabb.min(i) > axisLength) {
+					axisLength = aabb.max(i) - aabb.min(i);
+					selectedAxis = i;
 				}
-				++rightIt;
-			} while (rightIt != initialList.end());
+			}
+
+			// sort those elements in the range by the selected axis
+			std::sort(leafList.begin() + start, leafList.begin() + end,
+					  [selectedAxis](const auto& lhs, const auto& rhs) {
+						  return lhs->aabb.center(selectedAxis) < rhs->aabb.center(selectedAxis);
+					  });
+
+			// split in halt
+			int splitStart = (start + end + 1) / 2;
+
+			// find aabb for left part
+			min = Eigen::Vector3f(FLT_MAX, FLT_MAX, FLT_MAX);
+			max = Eigen::Vector3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (int i = start; i < splitStart; ++i) {
+				int index = leafList[i]->vertexIndex;
+				const auto& vertex = triangles[index].vertex;
+				for (int j = 0; j < 3; ++j) {
+					min = min.cwiseMin(vertex(j));
+					max = max.cwiseMax(vertex(j));
+				}
+			}
+			node->left = std::make_unique<TreeNode>(-1, min, max);
+			s.push(std::make_tuple(node->left.get(), start, splitStart));
+
+			// find aabb for right part
+			min = Eigen::Vector3f(FLT_MAX, FLT_MAX, FLT_MAX);
+			max = Eigen::Vector3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			for (int i = splitStart; i < end; ++i) {
+				int index = leafList[i]->vertexIndex;
+				const auto& vertex = triangles[index].vertex;
+				for (int j = 0; j < 3; ++j) {
+					min = min.cwiseMin(vertex(j));
+					max = max.cwiseMax(vertex(j));
+				}
+			}
+			node->right = std::make_unique<TreeNode>(-1, min, max);
+			s.push(std::make_tuple(node->right.get(), splitStart, end));
 		}
-
-		// combine the two nodes with a bigger bounding box
-		auto bigger = (*minLeftIt)->aabb.conbine((*minRightIt)->aabb);
-
-		auto newNode = new Node(bigger, *minLeftIt, *minRightIt);
-		*minLeftIt = newNode;
-		initialList.erase(minRightIt);
-	}
-
-	root = initialList.front();
-}
-
-void recursiveCheck(std::vector<int>& result, const Node* node, const Ray& r) {
-	// don't need to check aabb for a single triangle, since we have a triangle check
-	if (node->left == nullptr && node->right == nullptr) {
-		result.push_back(node->vertexIndex);
-	}
-	auto hasHit = node->aabb.hit(r);
-	if (hasHit) {
-		if (node->left != nullptr)
-			recursiveCheck(result, node->left, r);
-		if (node->right != nullptr)
-			recursiveCheck(result, node->right, r);
-	}
+	} while (!s.empty());
 }
 
 std::vector<int> BVH::hit(const Ray& r) const {
 	std::vector<int> result;
-	if (root == nullptr)
+	if (!root)
 		return result;
 
-	recursiveCheck(result, root, r);
+	std::stack<TreeNode*> s;
+	s.push(root.get());
+	do {
+		auto node = s.top();
+		s.pop();
+		bool hasHit = node->aabb.hit(r);
+		if (hasHit) {
+			if (node->vertexIndex >= 0)
+				result.push_back(node->vertexIndex);
+			else {
+				if (node->left)
+					s.push(node->left.get());
+				if (node->right)
+					s.push(node->right.get());
+			}
+		}
+	} while (!s.empty());
+
 	return result;
 }

@@ -6,71 +6,117 @@
 #include <array>
 #include <sstream>
 #include <iostream>
+#include <memory>
 
-#define MAX_RECURSIVE_DEPTH 10
+#include <assimp/Importer.hpp>
+#include <assimp/cimport.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+
+#include <Eigen/Geometry>
+
+#include <tbb/tbb.h>
 
 RayTracer::RayTracer(int width, int height) :
 	width(width),
 	height(height),
 	accumulateImg(height, width),
-	tempImg(height, width),
-	camera(Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), Eigen::Vector3f(0, 0, 0), 90, width, height) {
+	camera(width, height),
+	diffuseRayNum(10),
+	maxRecursionDepth(4),
+	backgroundColor(Eigen::Vector3f::Zero()) {
+}
+
+void RayTracer::setBackgroundColor(float r, float g, float b) {
+	backgroundColor = Eigen::Vector3f(r, g, b);
+}
+
+void RayTracer::setDiffuseRayNum(int num) {
+	diffuseRayNum = num;
+}
+
+void RayTracer::setMaxRecursionDepth(int depth) {
+	maxRecursionDepth = depth;
 }
 
 void RayTracer::loadModel(const std::string& path) {
-	// test
+	Assimp::Importer importer;
+	auto scene = importer.ReadFile(path,
+								   aiProcess_GenNormals |
+								   aiProcess_Triangulate |
+								   aiProcess_FixInfacingNormals |
+								   aiProcess_PreTransformVertices |
+								   aiProcess_FindDegenerates |
+								   aiProcess_SortByPType |
+								   aiProcess_OptimizeGraph |
+								   aiProcess_OptimizeMeshes);
+
+	if (scene == nullptr)
+		return;
+
+	unsigned meshNum = scene->mNumMeshes;
+	for (unsigned i = 0; i < meshNum; ++i) {
+		auto mesh = scene->mMeshes[i];
+		if (mesh->mPrimitiveTypes != aiPrimitiveType_TRIANGLE)
+			continue;
+
+		auto faceNum = mesh->mNumFaces;
+		for (unsigned j = 0; j < faceNum; ++j) {
+			auto face = mesh->mFaces[j];
+			Triangle tri;
+			for (int k = 0; k < 3; ++k) {
+				auto index = face.mIndices[k];
+				auto vertex = mesh->mVertices[index];
+				tri.vertex(k) = Eigen::Vector3f(vertex.x, vertex.y, vertex.z);
+				//auto vertexNormal = mesh->mNormals[index];
+			}
+			tri.normal = (tri.vertex(1) - tri.vertex(0)).cross(tri.vertex(2) - tri.vertex(0)).normalized();
+			tri.color = Eigen::Vector3f(0.8f, 0.8f, 0.8f);
+			tri.isLightEmitting = false;
+			tri.isTransparent = false;
+			tri.roughness = 0.1f;
+			tri.refractiveIndex = 1.5f;
+			trianglesArray.push_back(tri);
+		}
+	}
+}
+
+void RayTracer::addLighting(float x0, float y0, float z0,
+							float x1, float y1, float z1,
+							float x2, float y2, float z2,
+							float r, float g, float b) {
 	Triangle tri;
-	tri.vertex[0] = Eigen::Vector3f(5, -5, -10);
-	tri.vertex[1] = Eigen::Vector3f(-5, -5, -10);
-	tri.vertex[2] = Eigen::Vector3f(0, 5, -10);
-	tri.normal = Eigen::Vector3f(0, 0, 1);
-	tri.color = Eigen::Vector3f(0.9f, 0.1f, 0.3f);
+	tri.vertex[0] = Eigen::Vector3f(x0, y0, z0);
+	tri.vertex[1] = Eigen::Vector3f(x1, y1, z1);
+	tri.vertex[2] = Eigen::Vector3f(x2, y2, z2);
+	tri.normal = (tri.vertex(1) - tri.vertex(0)).cross(tri.vertex(2) - tri.vertex(0)).normalized();
+	tri.color = Eigen::Vector3f(r, g, b);
 	tri.isLightEmitting = true;
-	tri.isTransparent = false;
-
-	trianglesArray.push_back(tri);
-
-	tri.vertex[0] = Eigen::Vector3f(-2, -2, -2);
-	tri.vertex[1] = Eigen::Vector3f(2, -2, -2);
-	tri.vertex[2] = Eigen::Vector3f(0, -2, -10);
-	tri.normal = Eigen::Vector3f(0, 1, 0);
-	tri.color = Eigen::Vector3f(0.9f, 0.9f, 0.9f);
-	tri.isLightEmitting = false;
-	tri.roughness = 0.5f;
-
-	trianglesArray.push_back(tri);
-
-	tri.vertex[0] = Eigen::Vector3f(5, 2, -7);
-	tri.vertex[1] = Eigen::Vector3f(-5, 2, -7);
-	tri.vertex[2] = Eigen::Vector3f(0, 7, -7);
-	tri.normal = Eigen::Vector3f(0, 0, 1);
-	tri.color = Eigen::Vector3f(1.0f, 1.0f, 1.0f);
-	tri.isLightEmitting = false;
-	tri.roughness = 0.0f;
-	tri.isTransparent = true;
-	tri.refractiveIndex = 1.5f;
-
 	trianglesArray.push_back(tri);
 }
 
 Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
-	if (depth >= MAX_RECURSIVE_DEPTH)
-		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
+	if (depth >= maxRecursionDepth)
+		return backgroundColor;
 
 	auto hitList = bvh.hit(r);
 	if (hitList.empty())
-		return Eigen::Vector3f(0.0f, 0.0f, 0.0f);
+		return backgroundColor;
 
 	auto t = FLT_MAX;
 	auto index = -1;
 	for (int i = 0; i < hitList.size(); ++i) {
 		auto& tri = trianglesArray[hitList[i]];
-		auto [didHit, temp] = tri.hit(r);
-		if (didHit && temp < t) {
+		float temp = tri.hit(r);
+		if (temp < t) {
 			index = hitList[i];
 			t = temp;
 		}
 	}
+
+	// no hit
+	if (index == -1)
+		return backgroundColor;
 
 	auto& tri = trianglesArray[index];
 	if (tri.isLightEmitting)
@@ -81,11 +127,11 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 		Eigen::Vector3f refractColor = Eigen::Vector3f::Zero();
 		float refractProportion = 0.0f;
 		if (tri.isTransparent) {
-			Ray refractOut;
-			std::tie(refractProportion, refractOut) = tri.refract(r, hitPoint);
+			Eigen::Vector3f refractOut;
+			std::tie(refractProportion, refractOut) = tri.refract(r);
 
 			if (refractProportion > 0.01f)
-				refractColor = color(depth + 1, refractOut);
+				refractColor = color(depth + 1, Ray(hitPoint, refractOut));
 			else
 				refractProportion = 0.0f;
 
@@ -95,29 +141,29 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 
 		Eigen::Vector3f reflectColor;
 		if (tri.roughness > 0.99f) {
-			auto diffuseOut = tri.diffuse(r, hitPoint);
+			const auto& diffuseOutRay = tri.diffuse(r, hitPoint, diffuseRayNum);
 			Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
-			for (int i = 0; i < diffuseOut.size(); ++i) {
-				diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
+			for (int i = 0; i < diffuseRayNum; ++i) {
+				diffuseColor += tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, diffuseOutRay[i])));
 			}
-			reflectColor = diffuseColor / static_cast<float>(diffuseOut.size());
+			reflectColor = diffuseColor / static_cast<float>(diffuseRayNum);
 		}
 		else if (tri.roughness < 0.01f) {
-			auto specularOut = tri.specular(r, hitPoint);
-			reflectColor = tri.color.cwiseProduct(color(depth + 1, specularOut));
+			const auto& specularOutRay = tri.specular(r);
+			reflectColor = tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, specularOutRay)));
 		}
 		else {
-			auto diffuseOut = tri.diffuse(r, hitPoint);
+			const auto& diffuseOutRay = tri.diffuse(r, hitPoint, diffuseRayNum);
 			Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
-			for (int i = 0; i < diffuseOut.size(); ++i) {
-				diffuseColor += tri.color.cwiseProduct(color(depth + 1, diffuseOut[i]));
+			for (int i = 0; i < diffuseRayNum; ++i) {
+				diffuseColor += tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, diffuseOutRay[i])));
 			}
-			diffuseColor /= static_cast<float>(diffuseOut.size());
+			diffuseColor /= static_cast<float>(diffuseRayNum);
 
-			auto specularOut = tri.specular(r, hitPoint);
-			Eigen::Vector3f specularColor = tri.color.cwiseProduct(color(depth + 1, specularOut));
+			const auto& specularOutRay = tri.specular(r);
+			Eigen::Vector3f specularColor = tri.color.cwiseProduct(color(depth + 1, Ray(hitPoint, specularOutRay)));
 
-			reflectColor = tri.roughness * diffuseColor + (1 - tri.roughness) * specularColor;
+			reflectColor = tri.roughness * diffuseColor + (1.0f - tri.roughness) * specularColor;
 		}
 
 		return refractProportion * refractColor + (1.0f - refractProportion) * reflectColor;
@@ -125,46 +171,18 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 }
 
 void RayTracer::renderOneFrame() {
-	//int col = 100, row = 200;
-	//auto ray = camera.getRay(col, row);
+	tbb::parallel_for(0, width,
+					  [this](size_t col) {
+						  for (int row = 0; row < height; ++row) {
+							  const auto& ray = camera.getRay(col, row);
 
-	//Eigen::Vector3f temp = Eigen::Vector3f::Zero();
-	//for (auto& r : ray) {
-	//	temp += color(0, r);
-	//}
-	//temp /= 4.0f;
-
-	//tempImg(row, col) = temp;
-
-	//for (int col = 195; col < 205; ++col) {
-	//	for (int row = 95; row < 105; ++row) {
-	//		auto ray = camera.getRay(col, row);
-
-	//		Eigen::Vector3f temp = Eigen::Vector3f::Zero();
-	//		for (auto& r : ray) {
-	//			temp += color(0, r);
-	//		}
-	//		temp /= 4.0f;
-
-	//		tempImg(row, col) = temp;
-	//	}
-	//}
-
-	for (int col = 0; col < width; ++col) {
-		for (int row = 0; row < height; ++row) {
-			auto ray = camera.getRay(col, row);
-
-			Eigen::Vector3f temp = Eigen::Vector3f::Zero();
-			for (auto& r : ray) {
-				temp += color(0, r);
-			}
-			temp /= 4.0f;
-
-			tempImg(row, col) = temp;
-		}
-	}
-
-	accumulateImg += tempImg;
+							  Eigen::Vector3f temp = Eigen::Vector3f::Zero();
+							  for (const auto& r : ray) {
+								  temp += color(0, r);
+							  }
+							  accumulateImg(row, col) += temp * 0.25f;
+						  }
+					  });
 }
 
 void RayTracer::render(int frames) {
@@ -174,9 +192,7 @@ void RayTracer::render(int frames) {
 		}
 	}
 
-	auto byteBuffer = new uint8_t[width * height * 3];
-	stbi_flip_vertically_on_write(1);
-
+	auto byteBuffer = std::make_unique<uint8_t[]>(width * height * 3);
 	bvh.buildTree(trianglesArray);
 	for (int i = 1; i <= frames; ++i) {
 		renderOneFrame();
@@ -196,9 +212,16 @@ void RayTracer::render(int frames) {
 			}
 		}
 
-		stbi_write_png("out.png", width, height, 3, byteBuffer, 3 * width);
+		stbi_write_png("out.png", width, height, 3, byteBuffer.get(), 3 * width);
 		std::cout << "Output frame " << i << '\n';
 	}
-	delete[] byteBuffer;
 	std::cout << "Render finished" << std::endl;
+}
+
+void RayTracer::setCamera(float cameraX, float cameraY, float cameraZ,
+						  float viewPointX, float viewPointY, float viewPointZ,
+						  float focal) {
+	camera.setCamera(Eigen::Vector3f(cameraX, cameraY, cameraZ),
+					 Eigen::Vector3f(viewPointX, viewPointY, viewPointZ),
+					 focal, width, height);
 }

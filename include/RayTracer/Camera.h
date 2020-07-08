@@ -6,14 +6,15 @@
 
 class Camera {
 public:
-	Camera(const Eigen::Vector3f& origin, const Eigen::Vector3f& direction, const Eigen::Vector3f& up,
-		   float vFov, int width, int height);
+	Camera(int width, int height);
+	void setCamera(const Eigen::Vector3f& origin, const Eigen::Vector3f& viewPoint,
+				   float focal, int width, int height);
 
 	std::array<Ray, 4> getRay(int x, int y) const;
 
 private:
 	Eigen::Vector3f origin;
 	Eigen::Vector3f rightStep;
-	Eigen::Vector3f upStep;
-	Eigen::Vector3f leftDownCorner;
+	Eigen::Vector3f downStep;
+	Eigen::Vector3f leftUpCorner;
 };

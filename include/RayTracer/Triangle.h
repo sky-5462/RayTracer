@@ -2,7 +2,6 @@
 
 #include <RayTracer/Ray.h>
 #include <Eigen/Core>
-#include <random>
 
 class Triangle {
 public:
@@ -28,16 +27,14 @@ public:
 	int textureIndex;
 	Eigen::Array<Eigen::Vector2i, 3, 1> texture;
 
-	static std::mt19937 rand;
-
-	std::pair<bool, float> hit(const Ray& r) const;
+	float hit(const Ray& r) const;
 
 	// generate multiple rays
-	std::vector<Ray> diffuse(const Ray& r, const Eigen::Vector3f& hitPoint) const;
+	std::vector<Eigen::Vector3f> diffuse(const Ray& r, const Eigen::Vector3f& hitPoint, int rayNum) const;
 
-	// exact specular reflection
-	Ray specular(const Ray& r, const Eigen::Vector3f& hitPoint) const;
+	// an exact specular reflection ray
+	Eigen::Vector3f specular(const Ray& r) const;
 
 	// return the proportion of refraction and the corresponding ray
-	std::pair<float, Ray> refract(const Ray& r, const Eigen::Vector3f& hitPoint) const;
+	std::pair<float, Eigen::Vector3f> refract(const Ray& r) const;
 };
