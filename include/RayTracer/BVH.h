@@ -5,14 +5,23 @@
 #include <vector>
 #include <memory>
 
-class AABB {
-public:
-	AABB(const Eigen::Vector3f& min, const Eigen::Vector3f& max);
-	bool hit(const Ray& r) const;
+// with center, used for intermediate storage
+struct AABBTemp {
+	Eigen::Vector4f min;
+	Eigen::Vector4f max;
+	Eigen::Vector4f center;
+	int index;
 
-	Eigen::Vector3f min;
-	Eigen::Vector3f max;
-	Eigen::Vector3f center;
+	AABBTemp(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max);
+};
+
+// only have min and max, used for final storage and hit checking
+struct AABB {
+	Eigen::Vector4f min;
+	Eigen::Vector4f max;
+
+	AABB(const Eigen::Vector4f& min, const Eigen::Vector4f& max);
+	bool hit(const Ray& r) const;
 };
 
 struct TreeNode {
@@ -21,7 +30,7 @@ struct TreeNode {
 	std::unique_ptr<TreeNode> right;
 	int vertexIndex;
 
-	TreeNode(int vertexIndex, const Eigen::Vector3f& min, const Eigen::Vector3f& max);
+	TreeNode(int vertexIndex, const Eigen::Vector4f& min, const Eigen::Vector4f& max);
 };
 
 class BVH {

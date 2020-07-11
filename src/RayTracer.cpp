@@ -22,12 +22,12 @@ RayTracer::RayTracer(int width, int height) :
 	diffuseRayNum(10),
 	specualrRayNum(5),
 	maxRecursionDepth(4),
-	backgroundColor(Eigen::Vector3f::Zero()),
+	backgroundColor(Eigen::Vector4f::Zero()),
 	texture() {
 }
 
 void RayTracer::setBackgroundColor(float r, float g, float b) {
-	backgroundColor = Eigen::Vector3f(r, g, b);
+	backgroundColor = Eigen::Vector4f(r, g, b, 0.0f);
 }
 
 void RayTracer::setDiffuseRayNum(int num) {
@@ -81,16 +81,16 @@ void RayTracer::loadModel(const std::string& path, int index, float offsetX, flo
 			unsigned index = face.mIndices[k];
 
 			const auto& vertex = mesh->mVertices[index];
-			tri.vertexPosition(k) = Eigen::Vector3f(vertex.x + offsetX, vertex.y + offsetY, vertex.z + offsetZ);
+			tri.vertexPosition(k) = Eigen::Vector4f(vertex.x + offsetX, vertex.y + offsetY, vertex.z + offsetZ, 0.0f);
 
 			const auto& normal = mesh->mNormals[index];
-			tri.vertexNormal(k) = Eigen::Vector3f(normal.x, normal.y, normal.z);
+			tri.vertexNormal(k) = Eigen::Vector4f(normal.x, normal.y, normal.z, 0.0f);
 
 			const auto& uvCoordinate = mesh->mTextureCoords[0][index];
 			tri.uvCoordinate(k) = Eigen::Vector2f(uvCoordinate.x, uvCoordinate.y);
 		}
-		tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
-		tri.color = Eigen::Vector3f(color.r, color.g, color.b);
+		tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross3(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
+		tri.color = Eigen::Vector4f(color.r, color.g, color.b, 0.0f);
 		tri.isLightEmitting = false;
 		tri.isTransparent = false;
 		tri.isMetal = false;
@@ -111,7 +111,7 @@ void RayTracer::loadTexture(const std::string& path, int index) {
 void RayTracer::overrideColor(int index, float r, float g, float b) {
 	for (auto& tri : trianglesArray) {
 		if (tri.textureIndex == index) {
-			tri.color = Eigen::Vector3f(r, g, b);
+			tri.color = Eigen::Vector4f(r, g, b, 0.0f);
 		}
 	}
 }
@@ -164,15 +164,15 @@ void RayTracer::addTriangle(float x0, float y0, float z0,
 							bool isMetal, bool isLightEmitting, bool isTransparent,
 							float specularRoughness, float refractiveIndex) {
 	Triangle tri;
-	tri.vertexPosition[0] = Eigen::Vector3f(x0, y0, z0);
-	tri.vertexPosition[1] = Eigen::Vector3f(x1, y1, z1);
-	tri.vertexPosition[2] = Eigen::Vector3f(x2, y2, z2);
-	tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
-	Eigen::Vector3f normalDirection = Eigen::Vector3f(nx, ny, nz);
+	tri.vertexPosition[0] = Eigen::Vector4f(x0, y0, z0, 0.0f);
+	tri.vertexPosition[1] = Eigen::Vector4f(x1, y1, z1, 0.0f);
+	tri.vertexPosition[2] = Eigen::Vector4f(x2, y2, z2, 0.0f);
+	tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross3(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
+	Eigen::Vector4f normalDirection = Eigen::Vector4f(nx, ny, nz, 0.0f);
 	if (normalDirection.dot(tri.planeNormal) < 0.0f)
 		tri.planeNormal = -tri.planeNormal;
 
-	tri.color = Eigen::Vector3f(r, g, b);
+	tri.color = Eigen::Vector4f(r, g, b, 0.0f);
 	tri.isMetal = isMetal;
 	tri.isLightEmitting = isLightEmitting;
 	tri.isTransparent = isTransparent;
@@ -182,9 +182,9 @@ void RayTracer::addTriangle(float x0, float y0, float z0,
 	trianglesArray.push_back(tri);
 }
 
-Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
+Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 	if (depth >= maxRecursionDepth)
-		return Eigen::Vector3f::Zero();
+		return Eigen::Vector4f::Zero();
 
 	const auto& hitList = bvh.hit(r);
 	if (hitList.empty())
@@ -212,8 +212,8 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 	if (tri.isLightEmitting)
 		return tri.color;
 	else {
-		Eigen::Vector3f hitPoint = r.origin + t * r.direction;
-		Eigen::Vector3f normal = alpha * tri.vertexNormal(0) + beta * tri.vertexNormal(1) +
+		Eigen::Vector4f hitPoint = r.origin + t * r.direction;
+		Eigen::Vector4f normal = alpha * tri.vertexNormal(0) + beta * tri.vertexNormal(1) +
 			(1.0f - (alpha + beta)) * tri.vertexNormal(2);
 		normal.normalize();
 
@@ -221,7 +221,7 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 		if (tri.isMetal) {
 			// specular reflection only
 			const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
-			Eigen::Vector3f specularColor = Eigen::Vector3f::Zero();
+			Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
 			for (int i = 0; i < specualrRayNum; ++i) {
 				specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
 			}
@@ -230,36 +230,36 @@ Eigen::Vector3f RayTracer::color(int depth, const Ray& r) const {
 		else {
 			if (tri.isTransparent) {
 				const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
-				Eigen::Vector3f specularColor = Eigen::Vector3f::Zero();
+				Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
 				for (int i = 0; i < specualrRayNum; ++i) {
 					specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
 				}
 				specularColor /= static_cast<float>(specualrRayNum);
 
 				const auto& [refractProportion, refractOut] = tri.refract(normal, r);
-				Eigen::Vector3f refractColor = color(depth + 1, Ray(hitPoint, refractOut));
+				Eigen::Vector4f refractColor = color(depth + 1, Ray(hitPoint, refractOut));
 				return refractProportion * refractColor + (1.0f - refractProportion) * specularColor;
 			}
 			else {
 				float cosine = normal.dot(r.direction);
 				if (cosine >= 0.0f)
-					return Eigen::Vector3f::Zero();
+					return Eigen::Vector4f::Zero();
 
 				const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
-				Eigen::Vector3f specularColor = Eigen::Vector3f::Zero();
+				Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
 				for (int i = 0; i < specualrRayNum; ++i) {
 					specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
 				}
 				specularColor *= (0.04f / static_cast<float>(specualrRayNum));
 
 				const auto& diffuseOutRay = tri.diffuse(normal, r, diffuseRayNum);
-				Eigen::Vector3f diffuseColor = Eigen::Vector3f::Zero();
+				Eigen::Vector4f diffuseColor = Eigen::Vector4f::Zero();
 				for (int i = 0; i < diffuseRayNum; ++i) {
 					diffuseColor += color(depth + 1, Ray(hitPoint, diffuseOutRay[i]));
 				}
 				diffuseColor = diffuseColor.cwiseProduct(tri.color) / static_cast<float>(diffuseRayNum);
 
-				Eigen::Vector3f outColor = specularColor + diffuseColor * fabsf(normal.dot(r.direction));
+				Eigen::Vector4f outColor = specularColor + diffuseColor * fabsf(normal.dot(r.direction));
 
 				int index = tri.textureIndex;
 				if (index < 0)
@@ -285,7 +285,7 @@ void RayTracer::renderOneFrame() {
 						  for (int row = 0; row < height; ++row) {
 							  const auto& ray = camera.getRay(col, row);
 
-							  Eigen::Vector3f temp = Eigen::Vector3f::Zero();
+							  Eigen::Vector4f temp = Eigen::Vector4f::Zero();
 							  for (const auto& r : ray) {
 								  temp += color(0, r);
 							  }
@@ -297,7 +297,7 @@ void RayTracer::renderOneFrame() {
 void RayTracer::render(int frames) {
 	for (int col = 0; col < width; ++col) {
 		for (int row = 0; row < height; ++row) {
-			accumulateImg(row, col) = Eigen::Vector3f::Zero();
+			accumulateImg(row, col) = Eigen::Vector4f::Zero();
 		}
 	}
 
@@ -332,7 +332,7 @@ void RayTracer::render(int frames) {
 void RayTracer::setCamera(float cameraX, float cameraY, float cameraZ,
 						  float viewPointX, float viewPointY, float viewPointZ,
 						  float focal, float rotateAngle) {
-	camera.setCamera(Eigen::Vector3f(cameraX, cameraY, cameraZ),
-					 Eigen::Vector3f(viewPointX, viewPointY, viewPointZ),
+	camera.setCamera(Eigen::Vector4f(cameraX, cameraY, cameraZ, 0.0f),
+					 Eigen::Vector4f(viewPointX, viewPointY, viewPointZ, 0.0f),
 					 focal, rotateAngle, width, height);
 }

@@ -1,7 +1,7 @@
 #include <RayTracer/Texture.h>
 #include <stb_image.h>
 
-Texture::Texture() : data(nullptr), width(0), uMaxIndex(0), vMaxIndex(0) {}
+Texture::Texture() : data(nullptr), width(0), uMaxIndex(0.0f), vMaxIndex(0.0f) {}
 
 Texture::~Texture() {
 	if (data != nullptr)
@@ -23,7 +23,7 @@ bool Texture::hasTexture() const {
 	return data != nullptr;
 }
 
-Eigen::Vector3f Texture::sampleTexture(const Eigen::Vector2f& uvCoordinate) const {
+Eigen::Vector4f Texture::sampleTexture(const Eigen::Vector2f& uvCoordinate) const {
 	float u = uvCoordinate(0);
 	float v = uvCoordinate(1);
 	// try nearest-neighbor
@@ -33,5 +33,5 @@ Eigen::Vector3f Texture::sampleTexture(const Eigen::Vector2f& uvCoordinate) cons
 	float r = static_cast<float>(color[0]) / 255.0f;
 	float g = static_cast<float>(color[1]) / 255.0f;
 	float b = static_cast<float>(color[2]) / 255.0f;
-	return Eigen::Vector3f(r, g, b);
+	return Eigen::Vector4f(r, g, b, 0.0f);
 }

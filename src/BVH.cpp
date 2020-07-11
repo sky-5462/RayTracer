@@ -2,17 +2,21 @@
 #include <algorithm>
 #include <stack>
 
-AABB::AABB(const Eigen::Vector3f& min, const Eigen::Vector3f& max) :
-	min(min), max(max), center((min + max) * 0.5f) {
+AABBTemp::AABBTemp(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max) :
+	min(min), max(max), center((min + max) * 0.5f), index(index) {
 }
 
+AABB::AABB(const Eigen::Vector4f& min, const Eigen::Vector4f& max) : min(min), max(max) {}
+
 bool AABB::hit(const Ray& r) const {
+	Eigen::Vector4f invD = r.direction.cwiseInverse();
+	Eigen::Vector4f t0v = (min - r.origin).cwiseProduct(invD);
+	Eigen::Vector4f t1v = (max - r.origin).cwiseProduct(invD);
 	float tmin = 0.0f, tmax = FLT_MAX;
 	for (int i = 0; i < 3; i++) {
-		float invD = 1.0f / r.direction(i);
-		float t0 = (min(i) - r.origin(i)) * invD;
-		float t1 = (max(i) - r.origin(i)) * invD;
-		if (invD < 0.0f)
+		float t0 = t0v(i);
+		float t1 = t1v(i);
+		if (invD(i) < 0.0f)
 			std::swap(t0, t1);
 		tmin = fmaxf(t0, tmin);
 		tmax = fminf(t1, tmax);
@@ -23,7 +27,7 @@ bool AABB::hit(const Ray& r) const {
 	return true;
 }
 
-TreeNode::TreeNode(int index, const Eigen::Vector3f& min, const Eigen::Vector3f& max) :
+TreeNode::TreeNode(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max) :
 	vertexIndex(index), aabb(min, max) {
 }
 
@@ -32,15 +36,15 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 		return;
 
 	// for all triangles
-	Eigen::Vector3f min(FLT_MAX, FLT_MAX, FLT_MAX);
-	Eigen::Vector3f max(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+	Eigen::Vector4f min = Eigen::Vector4f::Constant(FLT_MAX);
+	Eigen::Vector4f max = Eigen::Vector4f::Constant(-FLT_MAX);
 
 	// leaf nodes
-	std::vector<std::unique_ptr<TreeNode>> leafList(triangles.size());
+	std::vector<std::unique_ptr<AABBTemp>> leafList(triangles.size());
 	for (int i = 0; i < triangles.size(); ++i) {
 		// for one triangle
-		Eigen::Vector3f tempMin(FLT_MAX, FLT_MAX, FLT_MAX);
-		Eigen::Vector3f tempMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+		Eigen::Vector4f tempMin = Eigen::Vector4f::Constant(FLT_MAX);
+		Eigen::Vector4f tempMax = Eigen::Vector4f::Constant(-FLT_MAX);
 
 		const auto& vertex = triangles[i].vertexPosition;
 		for (int j = 0; j < 3; ++j) {
@@ -50,7 +54,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			max = max.cwiseMax(vertex(j));
 		}
 
-		leafList[i] = std::make_unique<TreeNode>(i, tempMin, tempMax);
+		leafList[i] = std::make_unique<AABBTemp>(i, tempMin, tempMax);
 	}
 
 	// build tree
@@ -62,20 +66,24 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 		s.pop();
 		if (end - start <= 2) {
 			// must have one element
-			node->left = std::move(leafList[start]);
+			const auto& tempAABB = leafList[start];
+			node->left = std::make_unique<TreeNode>(tempAABB->index, tempAABB->min, tempAABB->max);
+
 			// may have two
 			if (end - start == 2) {
-				node->right = std::move(leafList[start + 1]);
+				const auto& tempAABB2 = leafList[start + 1];
+				node->right = std::make_unique<TreeNode>(tempAABB2->index, tempAABB2->min, tempAABB2->max);
 			}
 		}
 		else {
 			// find the longest axis
 			const auto& aabb = node->aabb;
-			float axisLength = aabb.max(0) - aabb.min(0);
+			Eigen::Vector4f diff = aabb.max - aabb.min;
+			float axisLength = diff(0);
 			int selectedAxis = 0;
 			for (int i = 1; i < 3; ++i) {
-				if (aabb.max(i) - aabb.min(i) > axisLength) {
-					axisLength = aabb.max(i) - aabb.min(i);
+				if (diff(i) > axisLength) {
+					axisLength = diff(i);
 					selectedAxis = i;
 				}
 			}
@@ -83,18 +91,18 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			// sort those elements in the range by the selected axis
 			std::sort(leafList.begin() + start, leafList.begin() + end,
 					  [selectedAxis](const auto& lhs, const auto& rhs) {
-						  return lhs->aabb.center(selectedAxis) < rhs->aabb.center(selectedAxis);
+						  return lhs->center(selectedAxis) < rhs->center(selectedAxis);
 					  });
 
 			// split in halt
 			int splitStart = (start + end + 1) / 2;
 
 			// find aabb for left part
-			min = Eigen::Vector3f(FLT_MAX, FLT_MAX, FLT_MAX);
-			max = Eigen::Vector3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			min = Eigen::Vector4f::Constant(FLT_MAX);
+			max = Eigen::Vector4f::Constant(-FLT_MAX);
 			for (int i = start; i < splitStart; ++i) {
-				int index = leafList[i]->vertexIndex;
-				const auto& vertex = triangles[index].vertexPosition;
+				int vertexIndex = leafList[i]->index;
+				const auto& vertex = triangles[vertexIndex].vertexPosition;
 				for (int j = 0; j < 3; ++j) {
 					min = min.cwiseMin(vertex(j));
 					max = max.cwiseMax(vertex(j));
@@ -104,11 +112,11 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			s.push(std::make_tuple(node->left.get(), start, splitStart));
 
 			// find aabb for right part
-			min = Eigen::Vector3f(FLT_MAX, FLT_MAX, FLT_MAX);
-			max = Eigen::Vector3f(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+			min = Eigen::Vector4f::Constant(FLT_MAX);
+			max = Eigen::Vector4f::Constant(-FLT_MAX);
 			for (int i = splitStart; i < end; ++i) {
-				int index = leafList[i]->vertexIndex;
-				const auto& vertex = triangles[index].vertexPosition;
+				int vertexIndex = leafList[i]->index;
+				const auto& vertex = triangles[vertexIndex].vertexPosition;
 				for (int j = 0; j < 3; ++j) {
 					min = min.cwiseMin(vertex(j));
 					max = max.cwiseMax(vertex(j));

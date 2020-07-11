@@ -2,20 +2,20 @@
 #include "Eigen/Geometry"
 
 Camera::Camera(int width, int height) {
-	setCamera(Eigen::Vector3f::Zero(), Eigen::Vector3f(0.0f, 0.0f, -1.0f), 50.0f, 0.0f, width, height);
+	setCamera(Eigen::Vector4f::Zero(), -Eigen::Vector4f::UnitZ(), 50.0f, 0.0f, width, height);
 }
 
-void Camera::setCamera(const Eigen::Vector3f& origin, const Eigen::Vector3f& viewPoint,
+void Camera::setCamera(const Eigen::Vector4f& origin, const Eigen::Vector4f& viewPoint,
 					   float focal, float rotateAngle, int width, int height) {
 	float fWidth = width;
 	float fHeight = height;
 	this->origin = origin;
-	Eigen::Vector3f direction = (viewPoint - origin).normalized();
-	Eigen::Vector3f right = direction.cross(Eigen::Vector3f(0.0f, 1.0f, 0.0f)).normalized();
-	Eigen::Vector3f down = direction.cross(right).normalized();
+	Eigen::Vector4f direction = (viewPoint - origin).normalized();
+	Eigen::Vector4f right = direction.cross3(Eigen::Vector4f::UnitY()).normalized();
+	Eigen::Vector4f down = direction.cross3(right).normalized();
 	
 	// use a 36x24mm frame
-	Eigen::Vector3f upHalfLength, rightHalfLength;
+	Eigen::Vector4f upHalfLength, rightHalfLength;
 	if (fWidth / fHeight >= 1.5f) {
 		rightHalfLength = right * (18.0f / focal);
 		upHalfLength = down * (18.0f / focal / (fWidth / fHeight));
@@ -28,7 +28,8 @@ void Camera::setCamera(const Eigen::Vector3f& origin, const Eigen::Vector3f& vie
 	rightStep = rightHalfLength / (fWidth / 2.0f);
 	downStep = upHalfLength / (fHeight / 2.0f);
 
-	auto rotateMatrix = Eigen::AngleAxisf((3.1415926f / 180.0f) * rotateAngle, direction).toRotationMatrix();
+	Eigen::Matrix4f rotateMatrix = Eigen::Matrix4f::Zero();
+	rotateMatrix.block<3, 3>(0, 0) = Eigen::AngleAxisf((3.1415926f / 180.0f) * rotateAngle, direction.head<3>()).toRotationMatrix();
 	leftUpCorner = rotateMatrix * leftUpCorner;
 	rightStep = rotateMatrix * rightStep;
 	downStep = rotateMatrix * downStep;

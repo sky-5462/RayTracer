@@ -42,7 +42,7 @@ public:
 private:
 	const int width;
 	const int height;
-	Eigen::Array<Eigen::Vector3f, -1, -1> accumulateImg;
+	Eigen::Array<Eigen::Vector4f, -1, -1> accumulateImg;
 	std::vector<Triangle> trianglesArray;
 	Camera camera;
 	BVH bvh;
@@ -54,10 +54,10 @@ private:
 	// default: 4
 	int maxRecursionDepth;
 	// default: black
-	Eigen::Vector3f backgroundColor;
+	Eigen::Vector4f backgroundColor;
 
 	std::vector<Texture> texture;
 
 	void renderOneFrame();
-	Eigen::Vector3f color(int depth, const Ray& r) const;
+	Eigen::Vector4f color(int depth, const Ray& r) const;
 };

@@ -10,11 +10,11 @@ public:
 	~Texture();
 	bool loadTexture(const std::string& path);
 	bool hasTexture() const;
-	Eigen::Vector3f sampleTexture(const Eigen::Vector2f& uvCoordinate) const;
+	Eigen::Vector4f sampleTexture(const Eigen::Vector2f& uvCoordinate) const;
 
 private:
+	uint8_t* data;
 	float uMaxIndex;
 	float vMaxIndex;
 	int width;
-	uint8_t* data;
 };

@@ -64,12 +64,12 @@
       "variables": [
         {
           "name": "CMAKE_CXX_FLAGS",
-          "value": "/DWIN32 /D_WINDOWS /GR /EHsc /arch:AVX2 /GL /Gw /GS-",
+          "value": "/DWIN32 /D_WINDOWS /GR /EHsc /arch:AVX2 /GL /Gw /GS- /fp:fast",
           "type": "STRING"
         },
         {
           "name": "CMAKE_C_FLAGS",
-          "value": "/DWIN32 /D_WINDOWS /arch:AVX2 /GL /Gw /GS-",
+          "value": "/DWIN32 /D_WINDOWS /arch:AVX2 /GL /Gw /GS- /fp:fast",
           "type": "STRING"
         },
         {
