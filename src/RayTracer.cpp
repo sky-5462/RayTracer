@@ -31,15 +31,18 @@ void RayTracer::setBackgroundColor(float r, float g, float b) {
 }
 
 void RayTracer::setDiffuseRayNum(int num) {
-	diffuseRayNum = num;
+	if (num >= 1)
+		diffuseRayNum = num;
 }
 
 void RayTracer::setSpecularRayNum(int num) {
-	specualrRayNum = num;
+	if (num >= 1)
+		specualrRayNum = num;
 }
 
 void RayTracer::setMaxRecursionDepth(int depth) {
-	maxRecursionDepth = depth;
+	if (depth >= 1)
+		maxRecursionDepth = depth;
 }
 
 void RayTracer::loadModel(const std::string& path, int index, float offsetX, float offsetY, float offsetZ) {
@@ -56,7 +59,7 @@ void RayTracer::loadModel(const std::string& path, int index, float offsetX, flo
 								   aiProcess_FindInvalidData |
 								   aiProcess_OptimizeGraph |
 								   aiProcess_OptimizeMeshes |
-								   aiProcess_GenUVCoords | 
+								   aiProcess_GenUVCoords |
 								   aiProcess_FlipUVs);
 
 	if (scene == nullptr) {
@@ -183,9 +186,6 @@ void RayTracer::addTriangle(float x0, float y0, float z0,
 }
 
 Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
-	if (depth >= maxRecursionDepth)
-		return Eigen::Vector4f::Zero();
-
 	const auto& hitList = bvh.hit(r);
 	if (hitList.empty())
 		return backgroundColor;
@@ -212,6 +212,9 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 	if (tri.isLightEmitting)
 		return tri.color;
 	else {
+		if (depth + 1 == maxRecursionDepth)
+			return Eigen::Vector4f::Zero();
+
 		Eigen::Vector4f hitPoint = r.origin + t * r.direction;
 		Eigen::Vector4f normal = alpha * tri.vertexNormal(0) + beta * tri.vertexNormal(1) +
 			(1.0f - (alpha + beta)) * tri.vertexNormal(2);
