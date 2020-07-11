@@ -8,7 +8,7 @@ class Camera {
 public:
 	Camera(int width, int height);
 	void setCamera(const Eigen::Vector3f& origin, const Eigen::Vector3f& viewPoint,
-				   float focal, int width, int height);
+				   float focal, float rotateAngle, int width, int height);
 
 	std::array<Ray, 4> getRay(int x, int y) const;
 

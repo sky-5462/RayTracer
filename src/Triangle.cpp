@@ -2,7 +2,7 @@
 #include <Eigen/QR>
 #include <random>
 
-std::pair<float, Eigen::Vector3f> Triangle::hit(const Ray& r) const {
+std::tuple<float, float, float> Triangle::hit(const Ray& r) const {
 	// get the hit point in that plane
 	float temp = planeNormal.dot(vertexPosition(0) - r.origin);
 	float t = temp / planeNormal.dot(r.direction);
@@ -17,47 +17,71 @@ std::pair<float, Eigen::Vector3f> Triangle::hit(const Ray& r) const {
 		float alpha = x(0);
 		float beta = x(1);
 		if (0.0f <= alpha && alpha <= 1.0f && 0.0f <= beta && beta <= 1.0f && alpha + beta <= 1.0f) {
-			Eigen::Vector3f normal = alpha * vertexNormal(0) + beta * vertexNormal(1) +
-				(1.0f - (alpha + beta)) * vertexNormal(2);
-			return std::make_pair(t, normal.normalized());
+			return std::make_tuple(t, alpha, beta);
 		}
 		else
-			return std::make_pair(FLT_MAX, Eigen::Vector3f());
+			return std::make_tuple(FLT_MAX, FLT_MAX, FLT_MAX);
 	}
 	else
-		return std::make_pair(FLT_MAX, Eigen::Vector3f());
+		return std::make_tuple(FLT_MAX, FLT_MAX, FLT_MAX);
 }
 
-std::vector<Eigen::Vector3f> Triangle::diffuse(const Eigen::Vector3f& normal, const Ray& r, const Eigen::Vector3f& hitPoint, int rayNum) const {
+std::vector<Eigen::Vector3f> Triangle::diffuse(const Eigen::Vector3f& normal, const Ray& r, int diffuseRayNum) const {
 	thread_local static std::mt19937 rand;
 	thread_local static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
 	// let the normal point to the same side with ray
 	Eigen::Vector3f tempNormal = (r.direction.dot(normal)) < 0.0f ? normal : -normal;
-	Eigen::Vector3f sphereCenter = hitPoint + tempNormal;
-	Eigen::Vector3f direction;
+	Eigen::Vector3f offset;
 	std::vector<Eigen::Vector3f> result;
-	result.reserve(rayNum);
+	result.reserve(diffuseRayNum);
 
-	for (int i = 0; i < rayNum; ++i) {
+	for (int i = 0; i < diffuseRayNum; ++i) {
+		// uniform distrition in the the sphere
 		do {
-			direction = sphereCenter;
-			direction.x() += dist(rand);
-			direction.y() += dist(rand);
-			direction.z() += dist(rand);
-		} while (direction.squaredNorm() < 1.0f);
+			offset = Eigen::Vector3f::Zero();
+			offset.x() += dist(rand);
+			offset.y() += dist(rand);
+			offset.z() += dist(rand);
+		} while (offset.squaredNorm() < 1.0f);
 
-		direction.normalize();
+		// uniform distrition in all directions
+		offset.normalize();
+
+		Eigen::Vector3f direction = (tempNormal + offset).normalized();
 		result.push_back(direction);
 	}
 
 	return result;
 }
 
-Eigen::Vector3f Triangle::specular(const Eigen::Vector3f& normal, const Ray& r) const {
-	// output direction must be a unit vector
+std::vector<Eigen::Vector3f> Triangle::specular(const Eigen::Vector3f& normal, const Ray& r, int specularRayNum) const {
+	thread_local static std::mt19937 rand;
+	thread_local static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+
 	float normalProjection = r.direction.dot(normal);
-	return r.direction - (2.0f * normalProjection) * normal;
+	Eigen::Vector3f direction = r.direction - (2.0f * normalProjection) * normal;
+
+	Eigen::Vector3f offset;
+	std::vector<Eigen::Vector3f> result;
+	result.reserve(specularRayNum);
+
+	for (int i = 0; i < specularRayNum; ++i) {
+		// uniform distrition in the the sphere
+		do {
+			offset = Eigen::Vector3f::Zero();
+			offset.x() += dist(rand);
+			offset.y() += dist(rand);
+			offset.z() += dist(rand);
+		} while (offset.squaredNorm() < 1.0f);
+
+		// for specular ray, we can use a Gaussian-like distribution
+		// output ray may go below the surface returning black or refractive color
+		Eigen::Vector3f outDirection = (direction + offset * specularRoughness).normalized();
+		result.push_back(direction);
+	}
+
+	return result;
 }
 
 // refer to: https://graphicscompendium.com/raytracing/10-reflection-refraction

@@ -1,0 +1,49 @@
+// example, remove comments and copy to the same place with the exeutable
+
+frame 1920 1080
+
+setting (must have header and trailer, but each item is optional)
+camera 50 50 0 0 0 0 400 0 (position.xyz lookAt.xyz focal rotateDegree)
+background_color 0.8 0.8 0.8 (rgb)
+max_recursion_depth 2
+diffuse_ray_number  2
+specular_ray_number 2
+end_setting
+
+model_num 1
+
+position_offset 0 0 0
+model_path path (no space)
+
+// optional items
+texture_path path (no space)
+override_color 0.8, 0.8, 0.8
+override_is_metal 1
+override_is_light_emitting 0
+override_is_transparent 0
+override_specularRoughness 1
+override_refractive_index 1.5
+// optional end
+
+model_end
+
+extra_triangles_num 1
+
+triangle
+vertex_0 -1000 100 1000
+vertex_1 1000 100 1000
+vertex_2 0 100 -1000
+normal_side 0 -1 0 (just point to one side)
+
+// optional items
+color 1, 1, 1
+is_metal 1
+is_light_emitting 1
+is_transparent 0
+specularRoughness 1
+refractive_index 1.5
+// optional end
+
+end_triangle
+
+render 2 (the number of frames)

@@ -7,33 +7,34 @@ class Triangle {
 public:
 	// OpenGL coordinate
 	Eigen::Array<Eigen::Vector3f, 3, 1> vertexPosition;
+	// calculate hit point normal by interpolation
 	Eigen::Array<Eigen::Vector3f, 3, 1> vertexNormal;
-	// must be unit vector
+	// used for hit checking
 	Eigen::Vector3f planeNormal;
 
-	// [0, 1]
+	bool isLightEmitting;
+	bool isMetal;
+
+	// [0, 1], diffuse color for non-metal or specular color for metal
 	Eigen::Vector3f color;
 
-	// proprotion between diffused and specular reflection
-	float roughness;
+	float specularRoughness;
 
 	// control refraction
 	float refractiveIndex;
 	bool isTransparent;
 
-	bool isLightEmitting;
-
-	// texture coordinate for each vertex
 	int textureIndex;
-	Eigen::Array<Eigen::Vector2i, 3, 1> texture;
+	Eigen::Array<Eigen::Vector2f, 3, 1> uvCoordinate;
 
-	std::pair<float, Eigen::Vector3f> hit(const Ray& r) const;
+	// return t, alpha, beta
+	std::tuple<float, float, float> hit(const Ray& r) const;
 
 	// generate multiple rays
-	std::vector<Eigen::Vector3f> diffuse(const Eigen::Vector3f& normal, const Ray& r, const Eigen::Vector3f& hitPoint, int rayNum) const;
+	std::vector<Eigen::Vector3f> diffuse(const Eigen::Vector3f& normal, const Ray& r, int diffuseRayNum) const;
 
 	// an exact specular reflection ray
-	Eigen::Vector3f specular(const Eigen::Vector3f& normal, const Ray& r) const;
+	std::vector<Eigen::Vector3f> specular(const Eigen::Vector3f& normal, const Ray& r, int specularRayNum) const;
 
 	// return the proportion of refraction and the corresponding ray
 	std::pair<float, Eigen::Vector3f> refract(const Eigen::Vector3f& normal, const Ray& r) const;
