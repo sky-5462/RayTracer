@@ -220,6 +220,11 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 			(1.0f - (alpha + beta)) * tri.vertexNormal(2);
 		normal.normalize();
 
+		// ignore rays coming from the back side
+		float cosine = normal.dot(r.direction);
+		if (!tri.isTransparent && cosine >= 0.0f)
+			return Eigen::Vector4f::Zero();
+
 		// refer to: https://zhuanlan.zhihu.com/p/21961722?refer=highwaytographics
 		if (tri.isMetal) {
 			// specular reflection only
@@ -244,10 +249,6 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 				return refractProportion * refractColor + (1.0f - refractProportion) * specularColor;
 			}
 			else {
-				float cosine = normal.dot(r.direction);
-				if (cosine >= 0.0f)
-					return Eigen::Vector4f::Zero();
-
 				const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
 				Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
 				for (int i = 0; i < specualrRayNum; ++i) {

@@ -107,7 +107,7 @@ int main() {
 			else if (key == "override_specularRoughness") {
 				float roughness;
 				config >> roughness;
-				tracer.overrideRefractiveIndex(i, roughness);
+				tracer.overrideSpecularRoughness(i, roughness);
 			}
 			else if (key == "override_refractive_index") {
 				float refIndex;
