@@ -1,49 +1,57 @@
-// example, remove comments and copy to the same place with the exeutable
+// 使用时移除注释
 
 frame 1920 1080
 
-setting (must have header and trailer, but each item is optional)
-camera 50 50 0 0 0 0 400 0 (position.xyz lookAt.xyz focal rotateDegree)
-background_color 0.8 0.8 0.8 (rgb)
+// setting和end_setting这两个标记必须有，但里面的项是可选的
+setting
+// 摄像机设置，分别为 位置xyz 观察点xyz 焦距 旋转角度（顺时针为正）
+camera 50 50 0 0 0 0 400 0
+// rgb值，取值范围[0, 1]
+background_color
 max_recursion_depth 2
 diffuse_ray_number  2
 specular_ray_number 2
 end_setting
 
+// 导入的模型数
 model_num 1
 
+// 模型放入的位置偏移，可以将多个模型放到不同位置
 position_offset 0 0 0
-model_path path (no space)
+// 模型的路径，不能有空格和引号
+model_path path
 
-// optional items
-texture_path path (no space)
-override_color 0.8, 0.8, 0.8
+// 可选项
+texture_path path
+override_color 0.8 0.8 0.8
 override_is_metal 1
 override_is_light_emitting 0
 override_is_transparent 0
 override_specularRoughness 1
 override_refractive_index 1.5
-// optional end
+// 可选项结束
 
 model_end
 
+// 额外添加三角形，可以作为地面或光源等
 extra_triangles_num 1
 
-triangle
 vertex_0 -1000 100 1000
 vertex_1 1000 100 1000
 vertex_2 0 100 -1000
-normal_side 0 -1 0 (just point to one side)
+// 法向量方向，只需要确定指向平面的某一边，不需要垂直于平面
+normal_side 0 -1 0
 
-// optional items
-color 1, 1, 1
-is_metal 1
-is_light_emitting 1
+// 可选项，下面是默认值
+color 1 1 1
+is_metal 0
+is_light_emitting 0
 is_transparent 0
-specularRoughness 1
+specularRoughness 0
 refractive_index 1.5
-// optional end
+// 可选项结束
 
 end_triangle
 
-render 2 (the number of frames)
+// 渲染帧上限，虽然可以直接kill掉进程
+render 2

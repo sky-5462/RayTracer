@@ -5,7 +5,7 @@
 #include <RayTracer/BVH.h>
 #include <RayTracer/Texture.h>
 #include <Eigen/Core>
-#include <string>
+#include <string_view>
 
 class RayTracer {
 public:
@@ -19,8 +19,8 @@ public:
 	void setSpecularRayNum(int num);
 	void setMaxRecursionDepth(int depth);
 
-	void loadModel(const std::string& path, int index, float offsetX, float offsetY, float offsetZ);
-	void loadTexture(const std::string& path, int index);
+	void loadModel(std::string_view path, int index, float offsetX, float offsetY, float offsetZ);
+	void loadTexture(std::string_view path, int index);
 	void overrideColor(int index, float r, float g, float b);
 	void overrideIsMetal(int index, bool isMetal);
 	void overrideIsLightEmitting(int index, bool isLightEmitting);

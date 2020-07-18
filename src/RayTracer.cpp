@@ -3,7 +3,6 @@
 #include <array>
 #include <sstream>
 #include <iostream>
-#include <memory>
 
 #include <assimp/Importer.hpp>
 #include <assimp/cimport.h>
@@ -45,10 +44,10 @@ void RayTracer::setMaxRecursionDepth(int depth) {
 		maxRecursionDepth = depth;
 }
 
-void RayTracer::loadModel(const std::string& path, int index, float offsetX, float offsetY, float offsetZ) {
+void RayTracer::loadModel(std::string_view path, int index, float offsetX, float offsetY, float offsetZ) {
 	Assimp::Importer importer;
 	importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
-	auto scene = importer.ReadFile(path,
+	auto scene = importer.ReadFile(std::string(path),
 								   aiProcess_GenNormals |
 								   aiProcess_Triangulate |
 								   aiProcess_FixInfacingNormals |
@@ -74,12 +73,12 @@ void RayTracer::loadModel(const std::string& path, int index, float offsetX, flo
 	aiColor3D color;
 	material->Get(AI_MATKEY_COLOR_DIFFUSE, color);
 
+	bool hasTextureCoord = mesh->HasTextureCoords(0);
 	unsigned faceNum = mesh->mNumFaces;
 	trianglesArray.reserve(faceNum + trianglesArray.size());
 	for (unsigned j = 0; j < faceNum; ++j) {
 		const auto& face = mesh->mFaces[j];
 		Triangle tri;
-		tri.textureIndex = index;
 		for (int k = 0; k < 3; ++k) {
 			unsigned index = face.mIndices[k];
 
@@ -89,8 +88,11 @@ void RayTracer::loadModel(const std::string& path, int index, float offsetX, flo
 			const auto& normal = mesh->mNormals[index];
 			tri.vertexNormal(k) = Eigen::Vector4f(normal.x, normal.y, normal.z, 0.0f);
 
-			const auto& uvCoordinate = mesh->mTextureCoords[0][index];
-			tri.uvCoordinate(k) = Eigen::Vector2f(uvCoordinate.x, uvCoordinate.y);
+			tri.isTextureSupported = hasTextureCoord;
+			if (hasTextureCoord) {
+				const auto& uvCoordinate = mesh->mTextureCoords[0][index];
+				tri.uvCoordinate(k) = Eigen::Vector2f(uvCoordinate.x, uvCoordinate.y);
+			}
 		}
 		tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross3(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
 		tri.color = Eigen::Vector4f(color.r, color.g, color.b, 0.0f);
@@ -99,16 +101,26 @@ void RayTracer::loadModel(const std::string& path, int index, float offsetX, flo
 		tri.isMetal = false;
 		tri.specularRoughness = 1.0f;
 		tri.refractiveIndex = 1.5f;
+		tri.textureIndex = index;
 		trianglesArray.push_back(tri);
 	}
 
 	texture.push_back(Texture());
 }
 
-void RayTracer::loadTexture(const std::string& path, int index) {
-	bool success = texture[index].loadTexture(path);
-	if (!success)
-		std::cout << "Failed to load texture #" << index << '\n';
+void RayTracer::loadTexture(std::string_view path, int index) {
+	auto it = std::find_if(trianglesArray.cbegin(), trianglesArray.cend(),
+				 [index](const auto& val) {
+					 return val.textureIndex == index;
+				 });
+	if (it->isTextureSupported) {
+		bool success = texture[index].loadTexture(path);
+		if (!success)
+			std::cout << "Failed to load texture #" << index << '\n';
+	}
+	else {
+		std::cout << "Model " << index << " don't have uvCoordinate, no texture\n";
+	}
 }
 
 void RayTracer::overrideColor(int index, float r, float g, float b) {
@@ -175,6 +187,9 @@ void RayTracer::addTriangle(float x0, float y0, float z0,
 	if (normalDirection.dot(tri.planeNormal) < 0.0f)
 		tri.planeNormal = -tri.planeNormal;
 
+	for (int i = 0; i < 3; ++i) {
+		tri.vertexNormal(i) = tri.planeNormal;
+	}
 	tri.color = Eigen::Vector4f(r, g, b, 0.0f);
 	tri.isMetal = isMetal;
 	tri.isLightEmitting = isLightEmitting;
@@ -305,7 +320,7 @@ void RayTracer::render(int frames) {
 		}
 	}
 
-	auto byteBuffer = std::make_unique<uint8_t[]>(width * height * 3);
+	std::vector<uint8_t> byteBuffer(width * height * 3);
 	bvh.buildTree(trianglesArray);
 	for (int i = 1; i <= frames; ++i) {
 		renderOneFrame();
@@ -327,7 +342,7 @@ void RayTracer::render(int frames) {
 			}
 		}
 
-		stbi_write_png("out.png", width, height, 3, byteBuffer.get(), 3 * width);
+		stbi_write_png("out.png", width, height, 3, byteBuffer.data(), 3 * width);
 		std::cout << "Output frame " << i << '\n';
 	}
 	std::cout << "Render finished" << std::endl;

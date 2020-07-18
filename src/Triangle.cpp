@@ -3,11 +3,11 @@
 #include <random>
 
 std::tuple<float, float, float> Triangle::hit(const Ray& r) const {
-	// get the hit point in that plane
+	// 求光线与三角形所在平面相交时的ｔ值
+	// 光线前进相交于平面时ｔ必然为正数，这里的0.001排除误差判定为光线与射出点所在平面本身相交
+	// 光线平行于平面会产生NaN，也能排除掉
 	float temp = planeNormal.dot(vertexPosition(0) - r.origin);
 	float t = temp / planeNormal.dot(r.direction);
-	// negative t means go backwards and 0 means hit the origin itselt, need to exclude them
-	// produce NaN if the ray is in that plane, but still get a false
 	if (t > 0.001f) {
 		Eigen::Matrix<float, 3, 2> matrix;
 		matrix.col(0) = (vertexPosition(0) - vertexPosition(2)).head<3>();
@@ -30,18 +30,18 @@ std::vector<Eigen::Vector4f> Triangle::diffuse(const Eigen::Vector4f& normal, co
 	thread_local static std::mt19937 rand;
 	thread_local static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
-	// let the normal point to the same side with ray
+	// 法向量指向光线射入的方向
 	Eigen::Vector4f tempNormal = (r.direction.dot(normal)) < 0.0f ? normal : -normal;
 	std::vector<Eigen::Vector4f> result(diffuseRayNum);
 
 	for (int i = 0; i < diffuseRayNum; ++i) {
-		// uniform distrition in the the sphere
+		// 单位球内的均匀分布
 		Eigen::Vector4f offset;
 		do {
 			offset = Eigen::Vector4f(dist(rand), dist(rand), dist(rand), 0.0f);
 		} while (offset.squaredNorm() < 1.0f);
 
-		// uniform distrition in all directions
+		// 归一化到球面上，产生各方向的均匀分布
 		offset.normalize();
 		result[i] = (tempNormal + offset).normalized();
 	}
@@ -59,15 +59,13 @@ std::vector<Eigen::Vector4f> Triangle::specular(const Eigen::Vector4f& normal, c
 	std::vector<Eigen::Vector4f> result(specularRayNum);
 
 	for (int i = 0; i < specularRayNum; ++i) {
-		// uniform distrition in the the sphere
+		// 单位球内的均匀分布
 		Eigen::Vector4f offset;
 		do {
 			offset = Eigen::Vector4f(dist(rand), dist(rand), dist(rand), 0.0f);
 		} while (offset.squaredNorm() < 1.0f);
 
-		// for specular ray, we can use a Gaussian-like distribution
-		// output ray may go below the surface returning black (non-transparent)
-		// or refractive color (transparent)
+		// 不进行归一化，各方向类似于高斯分布，对于镜面反射来说可以接受
 		result[i] = (direction + offset * specularRoughness).normalized();
 	}
 
@@ -78,27 +76,26 @@ std::vector<Eigen::Vector4f> Triangle::specular(const Eigen::Vector4f& normal, c
 std::pair<float, Eigen::Vector4f> Triangle::refract(const Eigen::Vector4f& normal, const Ray& r) const {
 	float dot = r.direction.dot(normal);
 
-	// outer index / inner index
+	// 入射折射率:出射折射率
 	float indexRatio = dot > 0.0f ? refractiveIndex : (1.0f / refractiveIndex);
 
-	// turn the normal to the same side with the input ray
+	// 法向量指向光线射入的方向
 	Eigen::Vector4f tempNormal = dot > 0.0f ? -normal : normal;
 
-	// angle with the input ray and the normal
+	// 入射光线和法向量之间的夹角的余弦
 	float cosineTheta = fabsf(dot);
 
-	// determine if we have no refraction (total reflection)
+	// 是否发生全反射
 	float squareSine1 = 1.0f - cosineTheta * cosineTheta;
 	float squareSine2 = (indexRatio * indexRatio) * squareSine1;
 	if (squareSine2 > 1.0f)
 		return std::make_pair(0.0f, Eigen::Vector4f());
 
-	// calculate the output ray
+	// 出射光线
 	float cosine2 = sqrtf(1.0f - squareSine2);
 	Eigen::Vector4f outRay = indexRatio * (r.direction + cosineTheta * tempNormal) - tempNormal * cosine2;
 
-	// determine the proportion of refraction
-	// use Schlick's approximation
+	// 计算折射的比例，Schlick's approximation
 	float temp = (1.0f - indexRatio) / (1.0f + indexRatio);
 	float r0 = temp * temp;
 	float squareTemp = (1.0f - cosineTheta) * (1.0f - cosineTheta);

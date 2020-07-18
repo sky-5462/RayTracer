@@ -1,14 +1,14 @@
 #pragma once
 
 #include <Eigen/Core>
-#include <string>
+#include <string_view>
 
 // assume it's RGB
 class Texture {
 public:
 	Texture();
 	~Texture();
-	bool loadTexture(const std::string& path);
+	bool loadTexture(std::string_view path);
 	bool hasTexture() const;
 	Eigen::Vector4f sampleTexture(const Eigen::Vector2f& uvCoordinate) const;
 

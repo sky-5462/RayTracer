@@ -8,9 +8,9 @@ Texture::~Texture() {
 		stbi_image_free(data);
 }
 
-bool Texture::loadTexture(const std::string& path) {
+bool Texture::loadTexture(std::string_view path) {
 	int height, channels;
-	data = stbi_load(path.c_str(), &width, &height, &channels, 3);
+	data = stbi_load(path.data(), &width, &height, &channels, 3);
 	if (data == nullptr)
 		return false;
 

@@ -5,7 +5,7 @@
 #include <vector>
 #include <memory>
 
-// with center, used for intermediate storage
+// 有中心点，用在中间过程
 struct AABBTemp {
 	Eigen::Vector4f min;
 	Eigen::Vector4f max;
@@ -15,7 +15,7 @@ struct AABBTemp {
 	AABBTemp(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max);
 };
 
-// only have min and max, used for final storage and hit checking
+// 最终存储，只有边框
 struct AABB {
 	Eigen::Vector4f min;
 	Eigen::Vector4f max;
@@ -37,7 +37,7 @@ class BVH {
 public:
 	void buildTree(const std::vector<Triangle>& triangles);
 
-	// return the indics of triangles
+	// 返回命中的三角形的索引列表
 	std::vector<int> hit(const Ray& r) const;
 
 private:

@@ -20,7 +20,8 @@ bool AABB::hit(const Ray& r) const {
 			std::swap(t0, t1);
 		tmin = fmaxf(t0, tmin);
 		tmax = fminf(t1, tmax);
-		// a triangle paralleled to one coordinate plane means tmax = tmin
+
+		// 平行坐标平面的三角形有tmax = tmin
 		if (tmax < tmin)
 			return false;
 	}
@@ -35,14 +36,13 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 	if (triangles.empty())
 		return;
 
-	// for all triangles
+	// 整个场景的包围盒
 	Eigen::Vector4f min = Eigen::Vector4f::Constant(FLT_MAX);
 	Eigen::Vector4f max = Eigen::Vector4f::Constant(-FLT_MAX);
 
-	// leaf nodes
 	std::vector<std::unique_ptr<AABBTemp>> leafList(triangles.size());
 	for (int i = 0; i < triangles.size(); ++i) {
-		// for one triangle
+		// 一个三角形的包围盒
 		Eigen::Vector4f tempMin = Eigen::Vector4f::Constant(FLT_MAX);
 		Eigen::Vector4f tempMax = Eigen::Vector4f::Constant(-FLT_MAX);
 
@@ -57,7 +57,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 		leafList[i] = std::make_unique<AABBTemp>(i, tempMin, tempMax);
 	}
 
-	// build tree
+	// 建树
 	root = std::make_unique<TreeNode>(-1, min, max);
 	std::stack<std::tuple<TreeNode*, int, int>> s;
 	s.push(std::make_tuple(root.get(), 0, static_cast<int>(triangles.size())));
@@ -65,18 +65,18 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 		auto [node, start, end] = s.top();
 		s.pop();
 		if (end - start <= 2) {
-			// must have one element
+			// 一个划分只剩最多两个节点时，必然存在一个节点，挂到左子树
 			const auto& tempAABB = leafList[start];
 			node->left = std::make_unique<TreeNode>(tempAABB->index, tempAABB->min, tempAABB->max);
 
-			// may have two
+			// 可能存在第二个节点，挂到右子树
 			if (end - start == 2) {
 				const auto& tempAABB2 = leafList[start + 1];
 				node->right = std::make_unique<TreeNode>(tempAABB2->index, tempAABB2->min, tempAABB2->max);
 			}
 		}
 		else {
-			// find the longest axis
+			// 对每一次划分，先选择包围盒中最长的轴
 			const auto& aabb = node->aabb;
 			Eigen::Vector4f diff = aabb.max - aabb.min;
 			float axisLength = diff(0);
@@ -88,16 +88,16 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 				}
 			}
 
-			// sort those elements in the range by the selected axis
+			// 将节点按照中心位置在选定轴上的顺序排序
 			std::sort(leafList.begin() + start, leafList.begin() + end,
 					  [selectedAxis](const auto& lhs, const auto& rhs) {
 						  return lhs->center(selectedAxis) < rhs->center(selectedAxis);
 					  });
 
-			// split in halt
+			// 再将排完序的节点对半分，成为两个划分
 			int splitStart = (start + end + 1) / 2;
 
-			// find aabb for left part
+			// 找到前一个划分的包围盒
 			min = Eigen::Vector4f::Constant(FLT_MAX);
 			max = Eigen::Vector4f::Constant(-FLT_MAX);
 			for (int i = start; i < splitStart; ++i) {
@@ -111,7 +111,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			node->left = std::make_unique<TreeNode>(-1, min, max);
 			s.push(std::make_tuple(node->left.get(), start, splitStart));
 
-			// find aabb for right part
+			// 找到后一个划分的包围盒
 			min = Eigen::Vector4f::Constant(FLT_MAX);
 			max = Eigen::Vector4f::Constant(-FLT_MAX);
 			for (int i = splitStart; i < end; ++i) {

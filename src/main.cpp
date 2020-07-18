@@ -3,8 +3,12 @@
 #include <iostream>
 #include <string>
 
-int main() {
-	std::ifstream config("config.txt");
+int main(int args, char** argv) {
+	if (args != 2) {
+		std::cout << "Invalid arguments\n";
+		return -100;
+	}
+	std::ifstream config(argv[1]);
 	std::string key;
 	int width, height;
 	if (config >> key && key == "frame")
@@ -128,71 +132,65 @@ int main() {
 	}
 
 	for (int i = 0; i < triangleNum; ++i) {
-		if (config >> key && key == "triangle") {
-			float v0x, v0y, v0z;
-			if (config >> key && key == "vertex_0")
-				config >> v0x >> v0y >> v0z;
-			else {
-				std::cout << "Error: can't parse \"vertex_0\"\n";
-				return -7;
-			}
-
-			float v1x, v1y, v1z;
-			if (config >> key && key == "vertex_1")
-				config >> v1x >> v1y >> v1z;
-			else {
-				std::cout << "Error: can't parse \"vertex_1\"\n";
-				return -8;
-			}
-
-			float v2x, v2y, v2z;
-			if (config >> key && key == "vertex_2")
-				config >> v2x >> v2y >> v2z;
-			else {
-				std::cout << "Error: can't parse \"vertex_2\"\n";
-				return -9;
-			}
-
-			float nx, ny, nz;
-			if (config >> key && key == "normal_side")
-				config >> nx >> ny >> nz;
-			else {
-				std::cout << "Error: can't parse \"normal_side\"\n";
-				return -10;
-			}
-
-			float r = 1, g = 1, b = 1;
-			bool isMetal = false, isLightEmitting = true, isTransparent = false;
-			float specularRoughness = 1, refIndex = 1.5;
-			while (config >> key) {
-				if (key == "color")
-					config >> r >> g >> b;
-				else if (key == "is_metal")
-					config >> isMetal;
-				else if (key == "is_light_emitting")
-					config >> isLightEmitting;
-				else if (key == "is_transparent")
-					config >> isTransparent;
-				else if (key == "specularRoughness")
-					config >> specularRoughness;
-				else if (key == "refractive_index")
-					config >> refIndex;
-				else if (key == "end_triangle")
-					break;
-			}
-
-			tracer.addTriangle(v0x, v0y, v0z,
-							   v1x, v1y, v1z,
-							   v2x, v2y, v2z,
-							   nx, ny, nz,
-							   r, g, b,
-							   isMetal, isLightEmitting, isTransparent,
-							   specularRoughness, refIndex);
-		}
+		float v0x, v0y, v0z;
+		if (config >> key && key == "vertex_0")
+			config >> v0x >> v0y >> v0z;
 		else {
-			std::cout << "Error: can't parse \"triangle\"\n";
-			return -11;
+			std::cout << "Error: can't parse \"vertex_0\"\n";
+			return -7;
 		}
+
+		float v1x, v1y, v1z;
+		if (config >> key && key == "vertex_1")
+			config >> v1x >> v1y >> v1z;
+		else {
+			std::cout << "Error: can't parse \"vertex_1\"\n";
+			return -8;
+		}
+
+		float v2x, v2y, v2z;
+		if (config >> key && key == "vertex_2")
+			config >> v2x >> v2y >> v2z;
+		else {
+			std::cout << "Error: can't parse \"vertex_2\"\n";
+			return -9;
+		}
+
+		float nx, ny, nz;
+		if (config >> key && key == "normal_side")
+			config >> nx >> ny >> nz;
+		else {
+			std::cout << "Error: can't parse \"normal_side\"\n";
+			return -10;
+		}
+
+		float r = 1, g = 1, b = 1;
+		bool isMetal = false, isLightEmitting = false, isTransparent = false;
+		float specularRoughness = 0, refIndex = 1.5;
+		while (config >> key) {
+			if (key == "color")
+				config >> r >> g >> b;
+			else if (key == "is_metal")
+				config >> isMetal;
+			else if (key == "is_light_emitting")
+				config >> isLightEmitting;
+			else if (key == "is_transparent")
+				config >> isTransparent;
+			else if (key == "specularRoughness")
+				config >> specularRoughness;
+			else if (key == "refractive_index")
+				config >> refIndex;
+			else if (key == "end_triangle")
+				break;
+		}
+
+		tracer.addTriangle(v0x, v0y, v0z,
+						   v1x, v1y, v1z,
+						   v2x, v2y, v2z,
+						   nx, ny, nz,
+						   r, g, b,
+						   isMetal, isLightEmitting, isTransparent,
+						   specularRoughness, refIndex);
 	}
 
 	if (config >> key && key == "render") {
