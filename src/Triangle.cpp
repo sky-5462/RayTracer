@@ -1,6 +1,7 @@
 #include <RayTracer/Triangle.h>
 #include <Eigen/QR>
 #include <random>
+#include <cfloat>
 
 std::tuple<float, float, float> Triangle::hit(const Ray& r) const {
 	// 求光线与三角形所在平面相交时的ｔ值

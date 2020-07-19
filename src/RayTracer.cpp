@@ -3,6 +3,7 @@
 #include <array>
 #include <sstream>
 #include <iostream>
+#include <cfloat>
 
 #include <assimp/Importer.hpp>
 #include <assimp/cimport.h>

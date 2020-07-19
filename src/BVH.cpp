@@ -1,6 +1,7 @@
 #include <RayTracer/BVH.h>
 #include <algorithm>
 #include <stack>
+#include <cfloat>
 
 AABBTemp::AABBTemp(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max) :
 	min(min), max(max), center((min + max) * 0.5f), index(index) {

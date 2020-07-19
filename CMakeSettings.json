@@ -102,12 +102,12 @@
         },
         {
           "name": "CMAKE_CXX_FLAGS_RELEASE",
-          "value": "-DNDEBUG /O3 /Qipo",
+          "value": "-DNDEBUG /O3 /Qipo /Qstd=c++17",
           "type": "STRING"
         },
         {
           "name": "CMAKE_CXX_FLAGS",
-          "value": "/DWIN32 /D_WINDOWS /GR /EHsc /arch:CORE-AVX2",
+          "value": "/DWIN32 /D_WINDOWS /GR /EHsc /arch:CORE-AVX2 /Qstd=c++17",
           "type": "STRING"
         }
       ]
