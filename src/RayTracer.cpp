@@ -111,9 +111,9 @@ void RayTracer::loadModel(std::string_view path, int index, float offsetX, float
 
 void RayTracer::loadTexture(std::string_view path, int index) {
 	auto it = std::find_if(trianglesArray.cbegin(), trianglesArray.cend(),
-				 [index](const auto& val) {
-					 return val.textureIndex == index;
-				 });
+						   [index](const auto& val) {
+							   return val.textureIndex == index;
+						   });
 	if (it->isTextureSupported) {
 		bool success = texture[index].loadTexture(path);
 		if (!success)
@@ -225,78 +225,76 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 		return backgroundColor;
 
 	const auto& tri = trianglesArray[index];
+
+	Eigen::Vector4f hitPoint = r.origin + t * r.direction;
+	Eigen::Vector4f normal = alpha * tri.vertexNormal(0) + beta * tri.vertexNormal(1) +
+		(1.0f - (alpha + beta)) * tri.vertexNormal(2);
+	normal.normalize();
+
+	// ignore rays coming from the back side
+	float cosine = normal.dot(r.direction);
+	if (depth == maxRecursionDepth || (!tri.isTransparent && cosine >= 0.0f))
+		return Eigen::Vector4f::Zero();
+
 	if (tri.isLightEmitting)
 		return tri.color;
+
+	// refer to: https://zhuanlan.zhihu.com/p/21961722?refer=highwaytographics
+	if (tri.isMetal) {
+		// specular reflection only
+		const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
+		Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
+		for (int i = 0; i < specualrRayNum; ++i) {
+			specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
+		}
+		return specularColor.cwiseProduct(tri.color) / static_cast<float>(specualrRayNum);
+	}
 	else {
-		if (depth + 1 == maxRecursionDepth)
-			return Eigen::Vector4f::Zero();
-
-		Eigen::Vector4f hitPoint = r.origin + t * r.direction;
-		Eigen::Vector4f normal = alpha * tri.vertexNormal(0) + beta * tri.vertexNormal(1) +
-			(1.0f - (alpha + beta)) * tri.vertexNormal(2);
-		normal.normalize();
-
-		// ignore rays coming from the back side
-		float cosine = normal.dot(r.direction);
-		if (!tri.isTransparent && cosine >= 0.0f)
-			return Eigen::Vector4f::Zero();
-
-		// refer to: https://zhuanlan.zhihu.com/p/21961722?refer=highwaytographics
-		if (tri.isMetal) {
-			// specular reflection only
+		if (tri.isTransparent) {
 			const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
 			Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
 			for (int i = 0; i < specualrRayNum; ++i) {
 				specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
 			}
-			return specularColor.cwiseProduct(tri.color) / static_cast<float>(specualrRayNum);
+			specularColor /= static_cast<float>(specualrRayNum);
+
+			const auto& [refractProportion, refractOut] = tri.refract(normal, r);
+			Eigen::Vector4f refractColor = color(depth + 1, Ray(hitPoint, refractOut));
+			return refractProportion * refractColor + (1.0f - refractProportion) * specularColor;
 		}
 		else {
-			if (tri.isTransparent) {
-				const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
-				Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
-				for (int i = 0; i < specualrRayNum; ++i) {
-					specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
-				}
-				specularColor /= static_cast<float>(specualrRayNum);
-
-				const auto& [refractProportion, refractOut] = tri.refract(normal, r);
-				Eigen::Vector4f refractColor = color(depth + 1, Ray(hitPoint, refractOut));
-				return refractProportion * refractColor + (1.0f - refractProportion) * specularColor;
+			const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
+			Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
+			for (int i = 0; i < specualrRayNum; ++i) {
+				specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
 			}
-			else {
-				const auto& specularOutRay = tri.specular(normal, r, specualrRayNum);
-				Eigen::Vector4f specularColor = Eigen::Vector4f::Zero();
-				for (int i = 0; i < specualrRayNum; ++i) {
-					specularColor += color(depth + 1, Ray(hitPoint, specularOutRay[i]));
-				}
-				specularColor *= (0.04f / static_cast<float>(specualrRayNum));
+			specularColor *= (0.04f / static_cast<float>(specualrRayNum));
 
-				const auto& diffuseOutRay = tri.diffuse(normal, r, diffuseRayNum);
-				Eigen::Vector4f diffuseColor = Eigen::Vector4f::Zero();
-				for (int i = 0; i < diffuseRayNum; ++i) {
-					diffuseColor += color(depth + 1, Ray(hitPoint, diffuseOutRay[i]));
-				}
-				diffuseColor = diffuseColor.cwiseProduct(tri.color) / static_cast<float>(diffuseRayNum);
-
-				Eigen::Vector4f outColor = specularColor + diffuseColor * fabsf(normal.dot(r.direction));
-
-				int index = tri.textureIndex;
-				if (index < 0)
-					return outColor;
-
-				const auto& tex = texture[index];
-				if (tex.hasTexture()) {
-					Eigen::Vector2f uvCoordinate = alpha * tri.uvCoordinate(0) + beta * tri.uvCoordinate(1) +
-						(1.0f - (alpha + beta)) * tri.uvCoordinate(2);
-
-					return outColor.cwiseProduct(tex.sampleTexture(uvCoordinate));
-				}
-				else
-					return outColor;
+			const auto& diffuseOutRay = tri.diffuse(normal, r, diffuseRayNum);
+			Eigen::Vector4f diffuseColor = Eigen::Vector4f::Zero();
+			for (int i = 0; i < diffuseRayNum; ++i) {
+				diffuseColor += color(depth + 1, Ray(hitPoint, diffuseOutRay[i]));
 			}
+			diffuseColor = diffuseColor.cwiseProduct(tri.color) / static_cast<float>(diffuseRayNum);
+
+			Eigen::Vector4f outColor = specularColor + diffuseColor * fabsf(normal.dot(r.direction));
+
+			int index = tri.textureIndex;
+			if (index < 0)
+				return outColor;
+
+			const auto& tex = texture[index];
+			if (tex.hasTexture()) {
+				Eigen::Vector2f uvCoordinate = alpha * tri.uvCoordinate(0) + beta * tri.uvCoordinate(1) +
+					(1.0f - (alpha + beta)) * tri.uvCoordinate(2);
+
+				return outColor.cwiseProduct(tex.sampleTexture(uvCoordinate));
+			}
+			else
+				return outColor;
 		}
 	}
+
 }
 
 void RayTracer::renderOneFrame() {
