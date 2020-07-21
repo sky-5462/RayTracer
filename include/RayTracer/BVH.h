@@ -3,7 +3,6 @@
 #include <RayTracer/Triangle.h>
 #include <RayTracer/Ray.h>
 #include <vector>
-#include <memory>
 
 // 有中心点，用在中间过程
 struct AABBTemp {
@@ -33,6 +32,16 @@ struct TreeNode {
 	TreeNode(int vertexIndex, const Eigen::Vector4f& min, const Eigen::Vector4f& max);
 };
 
+struct LinearNode {
+	AABB aabb;
+	int left;
+	int right;
+	int vertexIndex;
+
+	// 初始化aabb和index
+	LinearNode(const TreeNode& treeNode);
+};
+
 class BVH {
 public:
 	void buildTree(const std::vector<Triangle>& triangles);
@@ -41,5 +50,5 @@ public:
 	std::vector<int> hit(const Ray& r) const;
 
 private:
-	std::unique_ptr<TreeNode> root;
+	std::vector<LinearNode> linearTree;
 };

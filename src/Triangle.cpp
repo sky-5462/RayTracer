@@ -1,7 +1,25 @@
 #include <RayTracer/Triangle.h>
-#include <Eigen/QR>
+#include <Eigen/LU>
 #include <random>
 #include <cfloat>
+#include <array>
+
+constexpr unsigned randMask = 0x1FF;
+constexpr unsigned precision = randMask + 1;
+const std::array<float, precision> cosTable = []() {
+	std::array<float, precision> temp;
+	for (int i = 0; i < precision; ++i) {
+		temp[i] = cosf(i * 3.1415926f * 2.0f / precision);
+	}
+	return temp;
+}();
+const std::array<float, precision> sinTable = []() {
+	std::array<float, precision> temp;
+	for (int i = 0; i < precision; ++i) {
+		temp[i] = sinf(i * 3.1415926f * 2.0f / precision);
+	}
+	return temp;
+}();
 
 Eigen::Vector4f Triangle::hit(const Ray& r) const {
 	// 求光线与三角形所在平面相交时的ｔ值
@@ -14,7 +32,7 @@ Eigen::Vector4f Triangle::hit(const Ray& r) const {
 		matrix.col(0) = vertexPosition(0) - vertexPosition(2);
 		matrix.col(1) = vertexPosition(1) - vertexPosition(2);
 		Eigen::Vector4f hitPoint = r.origin + t * r.direction;
-		Eigen::Vector2f x = matrix.block<3, 2>(0, 0).householderQr().solve((hitPoint - vertexPosition(2)).head<3>());
+		Eigen::Vector2f x = matrix.block<3, 2>(0, 0).fullPivLu().solve((hitPoint - vertexPosition(2)).head<3>());
 		float alpha = x(0);
 		float beta = x(1);
 		if (0.0f <= alpha && alpha <= 1.0f && 0.0f <= beta && beta <= 1.0f && alpha + beta <= 1.0f) {
@@ -29,7 +47,6 @@ Eigen::Vector4f Triangle::hit(const Ray& r) const {
 
 std::vector<Eigen::Vector4f> Triangle::diffuse(const Eigen::Vector4f& normal, const Ray& r, int diffuseRayNum) const {
 	thread_local static std::mt19937 rand;
-	thread_local static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
 	// 法向量指向光线射入的方向
 	Eigen::Vector4f tempNormal = (r.direction.dot(normal)) < 0.0f ? normal : -normal;
@@ -37,13 +54,17 @@ std::vector<Eigen::Vector4f> Triangle::diffuse(const Eigen::Vector4f& normal, co
 
 	for (int i = 0; i < diffuseRayNum; ++i) {
 		// 单位球内的均匀分布
-		Eigen::Vector4f offset;
-		do {
-			offset = Eigen::Vector4f(dist(rand), dist(rand), dist(rand), 0.0f);
-		} while (offset.squaredNorm() < 1.0f);
 
-		// 归一化到球面上，产生各方向的均匀分布
-		offset.normalize();
+		// 水平面随机弧度, [0, 2 * PI)
+		float phiUnit = rand() & randMask;
+		Eigen::Vector4f horizontal(cosTable[phiUnit], sinTable[phiUnit], 0.0f, 0.0f);
+
+		// 垂直方向随机弧度, [0, PI)
+		float thetaUnit = (rand() & randMask) >> 1;
+
+		// 最终随机方向
+		Eigen::Vector4f offset = horizontal * sinTable[thetaUnit] + cosTable[thetaUnit] * Eigen::Vector4f::UnitZ();
+
 		result[i] = tempNormal + offset;
 	}
 
@@ -52,7 +73,6 @@ std::vector<Eigen::Vector4f> Triangle::diffuse(const Eigen::Vector4f& normal, co
 
 std::vector<Eigen::Vector4f> Triangle::specular(const Eigen::Vector4f& normal, const Ray& r, int specularRayNum) const {
 	thread_local static std::mt19937 rand;
-	thread_local static std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
 
 	float normalProjection = r.direction.dot(normal);
 	Eigen::Vector4f direction = r.direction - (2.0f * normalProjection) * normal;
@@ -61,12 +81,17 @@ std::vector<Eigen::Vector4f> Triangle::specular(const Eigen::Vector4f& normal, c
 
 	for (int i = 0; i < specularRayNum; ++i) {
 		// 单位球内的均匀分布
-		Eigen::Vector4f offset;
-		do {
-			offset = Eigen::Vector4f(dist(rand), dist(rand), dist(rand), 0.0f);
-		} while (offset.squaredNorm() < 1.0f);
 
-		// 不进行归一化，各方向类似于高斯分布，对于镜面反射来说可以接受
+		// 水平面随机弧度, [0, 2 * PI)
+		float phiUnit = rand() & randMask;
+		Eigen::Vector4f horizontal(cosTable[phiUnit], sinTable[phiUnit], 0.0f, 0.0f);
+
+		// 垂直方向随机弧度, [0, PI)
+		float thetaUnit = (rand() & randMask) >> 1;
+
+		// 最终随机方向
+		Eigen::Vector4f offset = horizontal * sinTable[thetaUnit] + cosTable[thetaUnit] * Eigen::Vector4f::UnitZ();
+
 		result[i] = direction + offset * specularRoughness;
 	}
 

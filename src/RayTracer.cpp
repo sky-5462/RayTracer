@@ -204,8 +204,6 @@ void RayTracer::addTriangle(float x0, float y0, float z0,
 
 Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 	const auto& hitList = bvh.hit(r);
-	if (hitList.empty())
-		return backgroundColor;
 
 	float t = FLT_MAX;
 	int index = -1;

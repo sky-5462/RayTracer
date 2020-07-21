@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <stack>
 #include <cfloat>
+#include <memory>
+#include <array>
 
 AABBTemp::AABBTemp(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max) :
 	min(min), max(max), center((min + max) * 0.5f), index(index) {
@@ -13,30 +15,38 @@ bool AABB::hit(const Ray& r) const {
 	Eigen::Vector4f invD = r.direction.cwiseInverse();
 	Eigen::Vector4f t0v = (min - r.origin).cwiseProduct(invD);
 	Eigen::Vector4f t1v = (max - r.origin).cwiseProduct(invD);
-	float tmin = 0.0f, tmax = FLT_MAX;
-	for (int i = 0; i < 3; i++) {
-		float t0 = t0v(i);
-		float t1 = t1v(i);
-		if (invD(i) < 0.0f)
-			std::swap(t0, t1);
-		tmin = fmaxf(t0, tmin);
-		tmax = fminf(t1, tmax);
 
-		// 平行坐标平面的三角形有tmax = tmin
-		if (tmax < tmin)
-			return false;
+	auto temp1 = _mm_load_ps(t0v.data());
+	auto temp2 = _mm_load_ps(t1v.data());
+	auto mask = _mm_load_ps(invD.data());
+	auto t0out = _mm_blendv_ps(temp1, temp2, mask);
+	auto t1out = _mm_blendv_ps(temp2, temp1, mask);
+
+	float tmin = t0out.m128_f32[0];
+	float tmax = t1out.m128_f32[0];
+	for (int i = 1; i < 3; i++) {
+		float t0 = t0out.m128_f32[i];
+		float t1 = t1out.m128_f32[i];
+		tmin = t0 > tmin ? t0 : tmin;
+		tmax = t1 < tmax ? t1 : tmax;
+
 	}
-	return true;
+	// 平行坐标平面的三角形有tmax = tmin
+	if (tmax < tmin)
+		return false;
+	else
+		return true;
 }
 
 TreeNode::TreeNode(int index, const Eigen::Vector4f& min, const Eigen::Vector4f& max) :
 	vertexIndex(index), aabb(min, max) {
 }
 
-void BVH::buildTree(const std::vector<Triangle>& triangles) {
-	if (triangles.empty())
-		return;
+LinearNode::LinearNode(const TreeNode& treeNode) :
+	vertexIndex(treeNode.vertexIndex), aabb(treeNode.aabb) {
+}
 
+void BVH::buildTree(const std::vector<Triangle>& triangles) {
 	// 整个场景的包围盒
 	Eigen::Vector4f min = Eigen::Vector4f::Constant(FLT_MAX);
 	Eigen::Vector4f max = Eigen::Vector4f::Constant(-FLT_MAX);
@@ -59,7 +69,7 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 	}
 
 	// 建树
-	root = std::make_unique<TreeNode>(-1, min, max);
+	auto root = std::make_unique<TreeNode>(-1, min, max);
 	std::stack<std::tuple<TreeNode*, int, int>> s;
 	s.push(std::make_tuple(root.get(), 0, static_cast<int>(triangles.size())));
 	do {
@@ -127,30 +137,54 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 			s.push(std::make_tuple(node->right.get(), splitStart, end));
 		}
 	} while (!s.empty());
+
+	// 转换成线性树
+	std::vector<TreeNode*> ptrQueue;
+	ptrQueue.push_back(root.get());
+	linearTree.emplace_back(*root);
+	for (int i = 0; i < ptrQueue.size(); ++i) {
+		auto nodePtr = ptrQueue[i];
+		if (nodePtr->left) {
+			ptrQueue.push_back(nodePtr->left.get());
+			linearTree[i].left = ptrQueue.size() - 1;
+			linearTree.emplace_back(*(nodePtr->left));
+		}
+		if (nodePtr->right) {
+			ptrQueue.push_back(nodePtr->right.get());
+			linearTree[i].right = ptrQueue.size() - 1;
+			linearTree.emplace_back(*(nodePtr->right));
+		}
+	}
 }
 
 std::vector<int> BVH::hit(const Ray& r) const {
+	// 预留空间，减少空间分配开销
 	std::vector<int> result;
-	if (!root)
-		return result;
+	result.reserve(linearTree.size() / 4);
 
-	std::stack<TreeNode*> s;
-	s.push(root.get());
+	// 栈空间做递归栈，32层足够上亿个节点了
+	std::array<int, 32> stack = { 0 };
+	int stackSize = 1;
 	do {
-		auto node = s.top();
-		s.pop();
-		bool hasHit = node->aabb.hit(r);
+		int nodeIndex = stack[stackSize - 1];
+		stackSize--;
+		const auto& node = linearTree[nodeIndex];
+		bool hasHit = node.aabb.hit(r);
 		if (hasHit) {
-			if (node->vertexIndex >= 0)
-				result.push_back(node->vertexIndex);
+			if (node.vertexIndex >= 0)
+				result.push_back(node.vertexIndex);
 			else {
-				if (node->left)
-					s.push(node->left.get());
-				if (node->right)
-					s.push(node->right.get());
+				if (node.left > 0) {
+					stack[stackSize] = node.left;
+					stackSize++;
+				}
+				if (node.right > 0) {
+					stack[stackSize] = node.right;
+					stackSize++;
+				}
 			}
 		}
-	} while (!s.empty());
+	} while (stackSize != 0);
 
 	return result;
 }
