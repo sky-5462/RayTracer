@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iostream>
 #include <cfloat>
+#include <chrono>
 
 #include <assimp/Importer.hpp>
 #include <assimp/cimport.h>
@@ -322,7 +323,9 @@ void RayTracer::render(int frames) {
 	std::vector<uint8_t> byteBuffer(width * height * 3);
 	bvh.buildTree(trianglesArray);
 	for (int i = 1; i <= frames; ++i) {
+		auto time1 = std::chrono::system_clock::now();
 		renderOneFrame();
+		auto time2 = std::chrono::system_clock::now();
 
 		// convert float to uint8_t
 		for (int col = 0; col < width; ++col) {
@@ -341,8 +344,15 @@ void RayTracer::render(int frames) {
 			}
 		}
 
-		stbi_write_png("out.png", width, height, 3, byteBuffer.data(), 3 * width);
-		std::cout << "Output frame " << i << '\n';
+		std::stringstream str;
+		str << "out_";
+		str.fill('0');
+		str.width(3);
+		str << i;
+		str << ".png";
+		stbi_write_png(str.str().c_str(), width, height, 3, byteBuffer.data(), 3 * width);
+		
+		std::cout << "Output frame " << i << ", use " << std::chrono::duration<float>(time2 - time1).count() << "s\n";
 	}
 	std::cout << "Render finished" << std::endl;
 }

@@ -8,6 +8,3 @@ add_executable(RayTracer "src/main.cpp" "src/RayTracer.cpp" "src/BVH.cpp" "src/T
 target_include_directories(RayTracer PUBLIC "include")
 target_link_directories(RayTracer PUBLIC "lib")
 target_link_libraries(RayTracer PUBLIC assimp-vc142-mt PUBLIC tbb)
-
-set(INSTALL_PATH "${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE}")
-install(TARGETS RayTracer RUNTIME DESTINATION ${INSTALL_PATH})

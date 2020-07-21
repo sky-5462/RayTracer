@@ -6,10 +6,13 @@ frame 1920 1080
 setting
 // 摄像机设置，分别为 位置xyz 观察点xyz 焦距 旋转角度（顺时针为正）
 camera 50 50 0 0 0 0 400 0
-// rgb值，取值范围[0, 1]
+// rgb值，取值范围一般在[0, 1]，超过1也可以，不过没有做HDR的输出映射
 background_color
+// 最大递归深度
 max_recursion_depth 2
+// 漫反射产生的出射光线数
 diffuse_ray_number  2
+// 镜面反射产生的出射光线数
 specular_ray_number 2
 end_setting
 
@@ -21,16 +24,17 @@ position_offset 0 0 0
 // 模型的路径，不能有空格和引号
 model_path path
 
-// 可选项
+// 可选项，覆盖导入模型的属性
 texture_path path
 override_color 0.8 0.8 0.8
 override_is_metal 1
 override_is_light_emitting 0
 override_is_transparent 0
 override_specularRoughness 1
-override_refractive_index 1.5
+override_refractive_index 1.2
 // 可选项结束
 
+// 每个模型以该条语句结尾
 model_end
 
 // 额外添加三角形，可以作为地面或光源等
@@ -48,9 +52,10 @@ is_metal 0
 is_light_emitting 0
 is_transparent 0
 specularRoughness 0
-refractive_index 1.5
+refractive_index 1.2
 // 可选项结束
 
+// 每个三角形以该条语句结尾
 end_triangle
 
 // 渲染帧上限，虽然可以直接kill掉进程
