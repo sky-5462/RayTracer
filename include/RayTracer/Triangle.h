@@ -33,8 +33,8 @@ public:
 	bool isMetal;
 	bool isTransparent;
 
-	// return t, alpha, beta
-	std::tuple<float, float, float> hit(const Ray& r) const;
+	// return [alpha, beta, t]
+	Eigen::Vector4f hit(const Ray& r) const;
 
 	// 返回多条射出光线
 	std::vector<Eigen::Vector4f> diffuse(const Eigen::Vector4f& normal, const Ray& r, int diffuseRayNum) const;

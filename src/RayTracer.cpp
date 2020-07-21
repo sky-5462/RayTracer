@@ -212,12 +212,12 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 	float alpha, beta;
 	for (int i = 0; i < hitList.size(); ++i) {
 		const auto& tri = trianglesArray[hitList[i]];
-		const auto& [tTemp, alphaTemp, betaTemp] = tri.hit(r);
-		if (tTemp < t) {
+		const auto& hitCheck = tri.hit(r);
+		if (hitCheck(2) < t) {
 			index = hitList[i];
-			t = tTemp;
-			alpha = alphaTemp;
-			beta = betaTemp;
+			t = hitCheck(2);
+			alpha = hitCheck(0);
+			beta = hitCheck(1);
 		}
 	}
 

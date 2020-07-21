@@ -47,7 +47,7 @@ std::array<Ray, 4> Camera::getRay(int x, int y) const {
 		result[i].origin = origin;
 		float xTemp = x + xOffset[i];
 		float yTemp = y + yOffset[i];
-		result[i].direction = (leftUpCorner + xTemp * rightStep + yTemp * downStep).normalized();
+		result[i].direction = leftUpCorner + xTemp * rightStep + yTemp * downStep;
 	}
 	return result;
 }
