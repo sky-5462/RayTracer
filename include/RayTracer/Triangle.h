@@ -27,7 +27,6 @@ public:
 
 	// 指定使用的纹理
 	int textureIndex;
-	bool isTextureSupported;
 
 	bool isLightEmitting;
 	bool isMetal;

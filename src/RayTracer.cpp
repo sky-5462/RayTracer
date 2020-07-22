@@ -3,8 +3,10 @@
 #include <array>
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <cfloat>
 #include <chrono>
+#include <exception>
 
 #include <assimp/Importer.hpp>
 #include <assimp/cimport.h>
@@ -15,41 +17,18 @@
 #include <tbb/tbb.h>
 #include <stb_image_write.h>
 
-RayTracer::RayTracer(int width, int height) :
-	width(width),
-	height(height),
-	accumulateImg(height, width),
-	camera(width, height),
-	diffuseRayNum(10),
-	specualrRayNum(5),
-	maxRecursionDepth(4),
-	backgroundColor(Eigen::Vector4f::Zero()),
-	texture() {
-}
-
-void RayTracer::setBackgroundColor(float r, float g, float b) {
-	backgroundColor = Eigen::Vector4f(r, g, b, 0.0f);
-}
-
-void RayTracer::setDiffuseRayNum(int num) {
-	if (num >= 1)
-		diffuseRayNum = num;
-}
-
-void RayTracer::setSpecularRayNum(int num) {
-	if (num >= 1)
-		specualrRayNum = num;
-}
-
-void RayTracer::setMaxRecursionDepth(int depth) {
-	if (depth >= 1)
-		maxRecursionDepth = depth;
-}
-
-void RayTracer::loadModel(std::string_view path, int index, float offsetX, float offsetY, float offsetZ) {
+void RayTracer::loadModel(std::string_view modelPath,
+						  const Eigen::Vector4f& origin,
+						  bool isMetal,
+						  bool isLightEmitting,
+						  bool isTransparent,
+						  float specularRoughness,
+						  float refIndex,
+						  const std::optional<std::string_view>& texturePath,
+						  const std::optional<Eigen::Vector4f>& color) {
 	Assimp::Importer importer;
 	importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
-	auto scene = importer.ReadFile(std::string(path),
+	auto scene = importer.ReadFile(std::string(modelPath),
 								   aiProcess_GenNormals |
 								   aiProcess_Triangulate |
 								   aiProcess_FixInfacingNormals |
@@ -60,22 +39,34 @@ void RayTracer::loadModel(std::string_view path, int index, float offsetX, float
 								   aiProcess_FindInvalidData |
 								   aiProcess_OptimizeGraph |
 								   aiProcess_OptimizeMeshes |
-								   aiProcess_GenUVCoords |
-								   aiProcess_FlipUVs);
-
+								   aiProcess_GenUVCoords);
 	if (scene == nullptr) {
-		std::cout << "Can't load model\n";
-		return;
+		std::string err("Can't load model in ");
+		err += modelPath;
+		throw std::exception(err.c_str());
 	}
 
 	auto mesh = scene->mMeshes[0];
 	unsigned materialIndex = mesh->mMaterialIndex;
 	auto material = scene->mMaterials[materialIndex];
 
-	aiColor3D color;
-	material->Get(AI_MATKEY_COLOR_DIFFUSE, color);
+	// 确定使用的颜色
+	aiColor3D colorTemp;
+	material->Get(AI_MATKEY_COLOR_DIFFUSE, colorTemp);
+	auto finalColor = color.has_value() ? color.value() : Eigen::Vector4f(colorTemp.r, colorTemp.g, colorTemp.b, 0.0f);
 
-	bool hasTextureCoord = mesh->HasTextureCoords(0);
+	// 确定是否存在纹理
+	bool useTexture = mesh->HasTextureCoords(0) && texturePath.has_value();
+	if (useTexture) {
+		Texture tex(texturePath.value());
+		if (!tex.hasTexture())
+			useTexture = false;
+		else
+			texturesArray.push_back(std::move(tex));
+	}
+	if (!useTexture)
+		std::cout << "No texture for model in " << modelPath << std::endl;
+
 	unsigned faceNum = mesh->mNumFaces;
 	trianglesArray.reserve(faceNum + trianglesArray.size());
 	for (unsigned j = 0; j < faceNum; ++j) {
@@ -85,114 +76,48 @@ void RayTracer::loadModel(std::string_view path, int index, float offsetX, float
 			unsigned index = face.mIndices[k];
 
 			const auto& vertex = mesh->mVertices[index];
-			tri.vertexPosition(k) = Eigen::Vector4f(vertex.x + offsetX, vertex.y + offsetY, vertex.z + offsetZ, 0.0f);
+			tri.vertexPosition(k) = Eigen::Vector4f(vertex.x, vertex.y, vertex.z, 0.0f) + origin;
 
 			const auto& normal = mesh->mNormals[index];
 			tri.vertexNormal(k) = Eigen::Vector4f(normal.x, normal.y, normal.z, 0.0f);
 
-			tri.isTextureSupported = hasTextureCoord;
-			if (hasTextureCoord) {
+			if (useTexture) {
 				const auto& uvCoordinate = mesh->mTextureCoords[0][index];
 				tri.uvCoordinate(k) = Eigen::Vector2f(uvCoordinate.x, uvCoordinate.y);
 			}
 		}
+
 		tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross3(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
-		tri.color = Eigen::Vector4f(color.r, color.g, color.b, 0.0f);
-		tri.isLightEmitting = false;
-		tri.isTransparent = false;
-		tri.isMetal = false;
-		tri.specularRoughness = 1.0f;
-		tri.refractiveIndex = 1.5f;
-		tri.textureIndex = index;
+		tri.isMetal = isMetal;
+		tri.isLightEmitting = isLightEmitting;
+		tri.isTransparent = isTransparent;
+		tri.specularRoughness = specularRoughness;
+		tri.refractiveIndex = refIndex;
+		tri.color = finalColor;
+		tri.textureIndex = useTexture ? texturesArray.size() - 1 : -1;
 		trianglesArray.push_back(tri);
 	}
-
-	texture.push_back(Texture());
 }
 
-void RayTracer::loadTexture(std::string_view path, int index) {
-	auto it = std::find_if(trianglesArray.cbegin(), trianglesArray.cend(),
-						   [index](const auto& val) {
-							   return val.textureIndex == index;
-						   });
-	if (it->isTextureSupported) {
-		bool success = texture[index].loadTexture(path);
-		if (!success)
-			std::cout << "Failed to load texture #" << index << '\n';
-	}
-	else {
-		std::cout << "Model " << index << " don't have uvCoordinate, no texture\n";
-	}
-}
-
-void RayTracer::overrideColor(int index, float r, float g, float b) {
-	for (auto& tri : trianglesArray) {
-		if (tri.textureIndex == index) {
-			tri.color = Eigen::Vector4f(r, g, b, 0.0f);
-		}
-	}
-}
-
-void RayTracer::overrideIsMetal(int index, bool isMetal) {
-	for (auto& tri : trianglesArray) {
-		if (tri.textureIndex == index) {
-			tri.isMetal = isMetal;
-		}
-	}
-}
-
-void RayTracer::overrideIsLightEmitting(int index, bool isLightEmitting) {
-	for (auto& tri : trianglesArray) {
-		if (tri.textureIndex == index) {
-			tri.isLightEmitting = isLightEmitting;
-		}
-	}
-}
-
-void RayTracer::overrideIsTransparent(int index, bool isTransparent) {
-	for (auto& tri : trianglesArray) {
-		if (tri.textureIndex == index) {
-			tri.isTransparent = isTransparent;
-		}
-	}
-}
-
-void RayTracer::overrideSpecularRoughness(int index, float roughness) {
-	for (auto& tri : trianglesArray) {
-		if (tri.textureIndex == index) {
-			tri.specularRoughness = roughness;
-		}
-	}
-}
-
-void RayTracer::overrideRefractiveIndex(int index, float refractiveIndex) {
-	for (auto& tri : trianglesArray) {
-		if (tri.textureIndex == index) {
-			tri.refractiveIndex = refractiveIndex;
-		}
-	}
-}
-
-void RayTracer::addTriangle(float x0, float y0, float z0,
-							float x1, float y1, float z1,
-							float x2, float y2, float z2,
-							float nx, float ny, float nz,
-							float r, float g, float b,
+void RayTracer::addTriangle(const Eigen::Vector4f& vertex0,
+							const Eigen::Vector4f& vertex1,
+							const Eigen::Vector4f& vertex2,
+							const Eigen::Vector4f& normalSide,
+							const Eigen::Vector4f& color,
 							bool isMetal, bool isLightEmitting, bool isTransparent,
 							float specularRoughness, float refractiveIndex) {
 	Triangle tri;
-	tri.vertexPosition[0] = Eigen::Vector4f(x0, y0, z0, 0.0f);
-	tri.vertexPosition[1] = Eigen::Vector4f(x1, y1, z1, 0.0f);
-	tri.vertexPosition[2] = Eigen::Vector4f(x2, y2, z2, 0.0f);
+	tri.vertexPosition[0] = vertex0;
+	tri.vertexPosition[1] = vertex1;
+	tri.vertexPosition[2] = vertex2;
 	tri.planeNormal = (tri.vertexPosition(1) - tri.vertexPosition(0)).cross3(tri.vertexPosition(2) - tri.vertexPosition(0)).normalized();
-	Eigen::Vector4f normalDirection = Eigen::Vector4f(nx, ny, nz, 0.0f);
-	if (normalDirection.dot(tri.planeNormal) < 0.0f)
+	if (normalSide.dot(tri.planeNormal) < 0.0f)
 		tri.planeNormal = -tri.planeNormal;
 
 	for (int i = 0; i < 3; ++i) {
 		tri.vertexNormal(i) = tri.planeNormal;
 	}
-	tri.color = Eigen::Vector4f(r, g, b, 0.0f);
+	tri.color = color;
 	tri.isMetal = isMetal;
 	tri.isLightEmitting = isLightEmitting;
 	tri.isTransparent = isTransparent;
@@ -220,8 +145,12 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 	}
 
 	// no hit
-	if (index == -1)
-		return backgroundColor;
+	if (index == -1) {
+		if (skybox.hasSkybox())
+			return skybox.sampleBackground(r);
+		else
+			return backgroundColor;
+	}
 
 	const auto& tri = trianglesArray[index];
 
@@ -278,66 +207,54 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 
 			Eigen::Vector4f outColor = specularColor + diffuseColor * fabsf(normal.dot(r.direction));
 
-			int index = tri.textureIndex;
-			if (index < 0)
+			if (tri.textureIndex < 0)
 				return outColor;
-
-			const auto& tex = texture[index];
-			if (tex.hasTexture()) {
+			else {
 				Eigen::Vector2f uvCoordinate = alpha * tri.uvCoordinate(0) + beta * tri.uvCoordinate(1) +
 					(1.0f - (alpha + beta)) * tri.uvCoordinate(2);
 
-				return outColor.cwiseProduct(tex.sampleTexture(uvCoordinate));
+				return outColor.cwiseProduct(texturesArray[tri.textureIndex].sampleTexture(uvCoordinate));
 			}
-			else
-				return outColor;
 		}
 	}
-
 }
 
-void RayTracer::renderOneFrame() {
-	tbb::parallel_for(0, width,
-					  [this](size_t col) {
-						  for (int row = 0; row < height; ++row) {
-							  const auto& ray = camera.getRay(col, row);
-
-							  Eigen::Vector4f temp = Eigen::Vector4f::Zero();
-							  for (const auto& r : ray) {
-								  temp += color(0, r);
-							  }
-							  accumulateImg(row, col) += temp * 0.25f;
-						  }
-					  });
-}
-
-void RayTracer::render(int frames) {
-	for (int col = 0; col < width; ++col) {
-		for (int row = 0; row < height; ++row) {
-			accumulateImg(row, col) = Eigen::Vector4f::Zero();
-		}
-	}
+void RayTracer::render() {
+	accumulateImg.resize(height, width);
+	accumulateImg.fill(Eigen::Vector4f::Zero());
 
 	std::vector<uint8_t> byteBuffer(width * height * 3);
 	bvh.buildTree(trianglesArray);
-	for (int i = 1; i <= frames; ++i) {
+	for (int i = 1; i <= renderNum; ++i) {
 		auto time1 = std::chrono::system_clock::now();
-		renderOneFrame();
+		tbb::parallel_for(0, width,
+						  [this](size_t col) {
+							  for (int row = 0; row < height; ++row) {
+								  const auto& ray = camera.getRay(col, row);
+
+								  Eigen::Vector4f temp = Eigen::Vector4f::Zero();
+								  for (const auto& r : ray) {
+									  temp += color(0, r);
+								  }
+								  accumulateImg(row, col) += temp * 0.25f;
+							  }
+						  });
+
 		auto time2 = std::chrono::system_clock::now();
 
-		// convert float to uint8_t
+		// 进行Gamma映射，再映射到[0, 255]
 		for (int col = 0; col < width; ++col) {
 			for (int row = 0; row < height; ++row) {
 				for (int k = 0; k < 3; ++k) {
-					float averaged = accumulateImg(row, col)(k) / static_cast<float>(i);
-					float gammaCorrected = sqrtf(averaged);
-					int temp = static_cast<int>(gammaCorrected * 255.0f);
+					float averaged = accumulateImg(row, col)(k) / i;
+					float gammaCorrected = powf(averaged, 1.0f / 2.2f);
+					int temp = lroundf(gammaCorrected * 255.0f);
 					if (temp > 255)
 						temp = 255;
 					else if (temp < 0)
 						temp = 0;
 
-					byteBuffer[row * (3 * width) + col * 3 + k] = temp;
+					byteBuffer[(row * width + col) * 3 + k] = temp;
 				}
 			}
 		}
@@ -349,7 +266,7 @@ void RayTracer::render(int frames) {
 		str << i;
 		str << ".png";
 		stbi_write_png(str.str().c_str(), width, height, 3, byteBuffer.data(), 3 * width);
-		
+
 		std::cout << "Output frame " << i << ", use " << std::chrono::duration<float>(time2 - time1).count() << "s\n";
 	}
 	std::cout << "Render finished" << std::endl;
@@ -361,4 +278,230 @@ void RayTracer::setCamera(float cameraX, float cameraY, float cameraZ,
 	camera.setCamera(Eigen::Vector4f(cameraX, cameraY, cameraZ, 0.0f),
 					 Eigen::Vector4f(viewPointX, viewPointY, viewPointZ, 0.0f),
 					 focal, rotateAngle, width, height);
+}
+
+void RayTracer::parseConfigFile(std::string_view path) {
+	std::ifstream config(path.data());
+	std::string key;
+	if (config >> key && key == "frame")
+		config >> width >> height;
+	else
+		throw std::exception("Can't parse \"frame\"");
+
+	if (config >> key && key == "camera") {
+		float x, y, z, atX, atY, atZ, focal, rotate;
+		config >> x >> y >> z >> atX >> atY >> atZ >> focal >> rotate;
+		camera.setCamera(Eigen::Vector4f(x, y, z, 0.0f),
+						 Eigen::Vector4f(atX, atY, atZ, 0.0f),
+						 focal, rotate, width, height);
+	}
+	else
+		throw std::exception("Can't parse \"camera\"");
+
+	if (config >> key && key == "background_color") {
+		float r, g, b;
+		config >> r >> g >> b;
+		backgroundColor = Eigen::Vector4f(r, g, b, 0.0f);
+	}
+	else
+		throw std::exception("Can't parse \"background_color\"");
+
+	if (config >> key && key == "max_recursion_depth") {
+		config >> maxRecursionDepth;
+		if (maxRecursionDepth <= 0)
+			throw std::exception("Expect: \"max_recursion_depth\" > 0");
+	}
+	else
+		throw std::exception("Can't parse \"max_recursion_depth\"");
+
+	if (config >> key && key == "diffuse_ray_number") {
+		config >> diffuseRayNum;
+		if (diffuseRayNum <= 0)
+			throw std::exception("Expect: \"diffuse_ray_number\" > 0");
+	}
+	else
+		throw std::exception("Can't parse \"diffuse_ray_number\"");
+
+	if (config >> key && key == "specular_ray_number") {
+		config >> specualrRayNum;
+		if (specualrRayNum <= 0)
+			throw std::exception("Expect: \"specular_ray_number\" > 0");
+	}
+	else
+		throw std::exception("Can't parse \"specular_ray_number\"");
+
+
+	while (config >> key) {
+		if (key == "skybox") {
+			float brightness;
+			std::string front, back, left, right, top, bottom;
+			config >> brightness >> front >> back >> left >> right >> top >> bottom;
+			skybox.load(brightness, front, back, left, right, top, bottom);
+		}
+		else if (key == "model_start") {
+			std::string modelPath;
+			if (config >> key && key == "model_path")
+				config >> modelPath;
+			else
+				throw std::exception("Can't parse \"model_path\"");
+
+			std::string texturePath;
+			if (config >> key && key == "texture_path")
+				config >> texturePath;
+			else
+				throw std::exception("Can't parse \"texture_path\"");
+			auto texPathOptional = std::make_optional(static_cast<std::string_view>(texturePath));
+			if (texturePath == "no")
+				texPathOptional.reset();
+
+			Eigen::Vector4f origin;
+			if (config >> key && key == "position_offset") {
+				float x, y, z;
+				config >> x >> y >> z;
+				origin = Eigen::Vector4f(x, y, z, 0.0f);
+			}
+			else
+				throw std::exception("Can't parse \"position_offset\"");
+
+			bool isMetal;
+			if (config >> key && key == "is_metal")
+				config >> isMetal;
+			else
+				throw std::exception("Can't parse \"is_metal\"");
+
+			bool isLightEmitting;
+			if (config >> key && key == "is_light_emitting")
+				config >> isLightEmitting;
+			else
+				throw std::exception("Can't parse \"is_light_emitting\"");
+
+			bool isTransparent;
+			if (config >> key && key == "is_transparent")
+				config >> isTransparent;
+			else
+				throw std::exception("Can't parse \"is_transparent\"");
+
+			float specularRoughness;
+			if (config >> key && key == "specular_roughness")
+				config >> specularRoughness;
+			else
+				throw std::exception("Can't parse \"specular_roughness\"");
+
+			float refIndex;
+			if (config >> key && key == "refractive_index")
+				config >> refIndex;
+			else
+				throw std::exception("Can't parse \"refractive_index\"");
+
+			std::optional<Eigen::Vector4f> color;
+			config >> key;
+			if (key == "override_color") {
+				float r, g, b;
+				config >> r >> g >> b;
+				color = Eigen::Vector4f(r, g, b, 0.0f);
+
+				config >> key;
+			}
+			if (key == "model_end") {
+				loadModel(modelPath, origin, isMetal, isLightEmitting, isTransparent, specularRoughness, refIndex,
+						  texPathOptional, color);
+				continue;
+			}
+			else
+				throw std::exception("Can't parse \"model_end\"");
+		}
+		else if (key == "triangle_start") {
+			Eigen::Vector4f vertex0;
+			if (config >> key && key == "vertex_0") {
+				float x, y, z;
+				config >> x >> y >> z;
+				vertex0 = Eigen::Vector4f(x, y, z, 0.0f);
+			}
+			else
+				throw std::exception("Can't parse \"vertex_0\"");
+
+			Eigen::Vector4f vertex1;
+			if (config >> key && key == "vertex_1") {
+				float x, y, z;
+				config >> x >> y >> z;
+				vertex1 = Eigen::Vector4f(x, y, z, 0.0f);
+			}
+			else
+				throw std::exception("Can't parse \"vertex_1\"");
+
+			Eigen::Vector4f vertex2;
+			if (config >> key && key == "vertex_2") {
+				float x, y, z;
+				config >> x >> y >> z;
+				vertex2 = Eigen::Vector4f(x, y, z, 0.0f);
+			}
+			else
+				throw std::exception("Can't parse \"vertex_2\"");
+
+			Eigen::Vector4f normalSide;
+			if (config >> key && key == "normal_side") {
+				float x, y, z;
+				config >> x >> y >> z;
+				normalSide = Eigen::Vector4f(x, y, z, 0.0f);
+			}
+			else
+				throw std::exception("Can't parse \"normal_side\"");
+
+			Eigen::Vector4f color;
+			if (config >> key && key == "color") {
+				float r, g, b;
+				config >> r >> g >> b;
+				color = Eigen::Vector4f(r, g, b, 0.0f);
+			}
+			else
+				throw std::exception("Can't parse \"color\"");
+
+			bool isMetal;
+			if (config >> key && key == "is_metal")
+				config >> isMetal;
+			else
+				throw std::exception("Can't parse \"is_metal\"");
+
+			bool isLightEmitting;
+			if (config >> key && key == "is_light_emitting")
+				config >> isLightEmitting;
+			else
+				throw std::exception("Can't parse \"is_light_emitting\"");
+
+			bool isTransparent;
+			if (config >> key && key == "is_transparent")
+				config >> isTransparent;
+			else
+				throw std::exception("Can't parse \"is_transparent\"");
+
+			float specularRoughness;
+			if (config >> key && key == "specular_roughness")
+				config >> specularRoughness;
+			else
+				throw std::exception("Can't parse \"specular_roughness\"");
+
+			float refIndex;
+			if (config >> key && key == "refractive_index")
+				config >> refIndex;
+			else
+				throw std::exception("Can't parse \"refractive_index\"");
+
+			if (config >> key && key == "triangle_end") {
+				addTriangle(vertex0, vertex1, vertex2, normalSide, color,
+							isMetal, isLightEmitting, isTransparent, specularRoughness, refIndex);
+				continue;
+			}
+			else
+				throw std::exception("Can't parse \"triangle_end\"");
+		}
+		else if (key == "render_num") {
+			config >> renderNum;
+			break;
+		}
+		else
+			throw std::exception("Expect: \"skybox\" or \"model_start\" or \"triangle_start\" or \"render_num\"");
+	}
+
+	config.close();
+	render();
 }

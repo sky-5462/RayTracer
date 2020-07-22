@@ -6,7 +6,6 @@
 
 class Camera {
 public:
-	Camera(int width, int height);
 	void setCamera(const Eigen::Vector4f& origin, const Eigen::Vector4f& viewPoint,
 				   float focal, float rotateAngle, int width, int height);
 

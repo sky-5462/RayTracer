@@ -43,7 +43,7 @@ TreeNode::TreeNode(int index, const Eigen::Vector4f& min, const Eigen::Vector4f&
 }
 
 LinearNode::LinearNode(const TreeNode& treeNode) :
-	vertexIndex(treeNode.vertexIndex), aabb(treeNode.aabb) {
+	vertexIndex(treeNode.vertexIndex), aabb(treeNode.aabb), left(-1), right(-1) {
 }
 
 void BVH::buildTree(const std::vector<Triangle>& triangles) {

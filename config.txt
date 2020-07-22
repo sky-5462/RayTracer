@@ -1,62 +1,65 @@
 // 使用时移除注释
 
+// 画面宽x高
 frame 1920 1080
 
-// setting和end_setting这两个标记必须有，但里面的项是可选的
-setting
-// 摄像机设置，分别为 位置xyz 观察点xyz 焦距 旋转角度（顺时针为正）
+// 摄像机设置，分别为 位置xyz（不能在y轴） 观察点xyz 焦距 旋转角度（顺时针为正）
 camera 50 50 0 0 0 0 400 0
-// rgb值，取值范围一般在[0, 1]，超过1也可以，不过没有做HDR的输出映射
-background_color
+// rgb值，取值范围一般在[0, 1]，超过1也可以，不过会截断
+background_color 0 0 0
 // 最大递归深度
 max_recursion_depth 2
 // 漫反射产生的出射光线数
 diffuse_ray_number  2
 // 镜面反射产生的出射光线数
 specular_ray_number 2
-end_setting
 
-// 导入的模型数
-model_num 1
+// 可选项，输入天空盒的亮度系数和各方向的图片路径，路径不能有空格和引号，用空格隔开各路径
+skybox brightness front back left right top bottom
 
-// 模型放入的位置偏移，可以将多个模型放到不同位置
-position_offset 0 0 0
+// 可放置多个模型，每个模型以该语句开始
+model_start
+
 // 模型的路径，不能有空格和引号
 model_path path
-
-// 可选项，覆盖导入模型的属性
+// 纹理的路径，没有就填no
 texture_path path
+// 模型放入场景的位置
+position_offset 0 0 0
+// 是否为金属
+is_metal 1
+// 是否发光
+is_light_emitting 0
+// 是否透明
+is_transparent 0
+// 镜面反射的粗糙程度
+specular_roughness 1
+// 折射率
+refractive_index 1.2
+
+// 可选项，覆盖导入模型的颜色
 override_color 0.8 0.8 0.8
-override_is_metal 1
-override_is_light_emitting 0
-override_is_transparent 0
-override_specularRoughness 1
-override_refractive_index 1.2
-// 可选项结束
 
 // 每个模型以该条语句结尾
 model_end
 
-// 额外添加三角形，可以作为地面或光源等
-extra_triangles_num 1
+// 可额外添加三角形，每个三角形以该语句开始
+triangle_start
 
 vertex_0 -1000 100 1000
 vertex_1 1000 100 1000
 vertex_2 0 100 -1000
 // 法向量方向，只需要确定指向平面的某一边，不需要垂直于平面
 normal_side 0 -1 0
-
-// 可选项，下面是默认值
 color 1 1 1
 is_metal 0
 is_light_emitting 0
 is_transparent 0
-specularRoughness 0
+specular_roughness 0
 refractive_index 1.2
-// 可选项结束
 
 // 每个三角形以该条语句结尾
-end_triangle
+triangle_end
 
-// 渲染帧上限，虽然可以直接kill掉进程
-render 2
+// 渲染的帧数
+render_num 2

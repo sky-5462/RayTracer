@@ -1,10 +1,6 @@
 #include "RayTracer/Camera.h"
 #include "Eigen/Geometry"
 
-Camera::Camera(int width, int height) {
-	setCamera(Eigen::Vector4f::Zero(), -Eigen::Vector4f::UnitZ(), 50.0f, 0.0f, width, height);
-}
-
 void Camera::setCamera(const Eigen::Vector4f& origin, const Eigen::Vector4f& viewPoint,
 					   float focal, float rotateAngle, int width, int height) {
 	float fWidth = width;
@@ -38,8 +34,8 @@ void Camera::setCamera(const Eigen::Vector4f& origin, const Eigen::Vector4f& vie
 // SSAA 4x sampling
 // 1  2
 // 3  4
-static constexpr std::array<float, 4> xOffset = { -0.25f, 0.25f, -0.25f, 0.25f };
-static constexpr std::array<float, 4> yOffset = { -0.25f, -0.25f, 0.25f, 0.25f };
+constexpr std::array<float, 4> xOffset = { -0.25f, 0.25f, -0.25f, 0.25f };
+constexpr std::array<float, 4> yOffset = { -0.25f, -0.25f, 0.25f, 0.25f };
 
 std::array<Ray, 4> Camera::getRay(int x, int y) const {
 	std::array<Ray, 4> result;

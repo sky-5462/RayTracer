@@ -4,60 +4,53 @@
 #include <RayTracer/Camera.h>
 #include <RayTracer/BVH.h>
 #include <RayTracer/Texture.h>
+#include <RayTracer/Skybox.h>
 #include <Eigen/Core>
 #include <string_view>
+#include <optional>
 
 class RayTracer {
 public:
-	RayTracer(int width, int height);
+	void parseConfigFile(std::string_view path);
+
+private:
+	int width;
+	int height;
+	int renderNum;
+	Eigen::Array<Eigen::Vector4f, -1, -1> accumulateImg;
+	std::vector<Triangle> trianglesArray;
+	std::vector<Texture> texturesArray;
+	Camera camera;
+	BVH bvh;
+	Skybox skybox;
+
+	int diffuseRayNum;
+	int specualrRayNum;
+	int maxRecursionDepth;
+	Eigen::Vector4f backgroundColor;
+
 	void setCamera(float cameraX, float cameraY, float cameraZ,
 				   float viewPointX, float viewPointY, float viewPointZ,
 				   float focal, float rotateAngle);
-	// [0, 1]
-	void setBackgroundColor(float r, float g, float b);
-	void setDiffuseRayNum(int num);
-	void setSpecularRayNum(int num);
-	void setMaxRecursionDepth(int depth);
 
-	void loadModel(std::string_view path, int index, float offsetX, float offsetY, float offsetZ);
-	void loadTexture(std::string_view path, int index);
-	void overrideColor(int index, float r, float g, float b);
-	void overrideIsMetal(int index, bool isMetal);
-	void overrideIsLightEmitting(int index, bool isLightEmitting);
-	void overrideIsTransparent(int index, bool isTransparent);
-	void overrideSpecularRoughness(int index, float roughness);
-	void overrideRefractiveIndex(int index, float refractiveIndex);
+	void loadModel(std::string_view modelPath,
+				   const Eigen::Vector4f& origin,
+				   bool isMetal,
+				   bool isLightEmitting,
+				   bool isTransparent,
+				   float specularRoughness,
+				   float refIndex,
+				   const std::optional<std::string_view>& texturePath,
+				   const std::optional<Eigen::Vector4f>& color);
 
-	void addTriangle(float x0, float y0, float z0,
-					 float x1, float y1, float z1,
-					 float x2, float y2, float z2,
-					 float nx, float ny, float nz,
-					 float r, float g, float b,
+	void addTriangle(const Eigen::Vector4f& vertex0,
+					 const Eigen::Vector4f& vertex1,
+					 const Eigen::Vector4f& vertex2,
+					 const Eigen::Vector4f& normalSide,
+					 const Eigen::Vector4f& color,
 					 bool isMetal, bool isLightEmitting, bool isTransparent,
 					 float specularRoughness, float refractiveIndex);
 
-	// finish all settings before rendering
-	void render(int frames);
-
-private:
-	const int width;
-	const int height;
-	Eigen::Array<Eigen::Vector4f, -1, -1> accumulateImg;
-	std::vector<Triangle> trianglesArray;
-	Camera camera;
-	BVH bvh;
-
-	// default: 10
-	int diffuseRayNum;
-	// default: 5
-	int specualrRayNum;
-	// default: 4
-	int maxRecursionDepth;
-	// default: black
-	Eigen::Vector4f backgroundColor;
-
-	std::vector<Texture> texture;
-
-	void renderOneFrame();
+	void render();
 	Eigen::Vector4f color(int depth, const Ray& r) const;
 };

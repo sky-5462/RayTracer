@@ -1,22 +1,37 @@
 #include <RayTracer/Texture.h>
 #include <stb_image.h>
 
-Texture::Texture() : data(nullptr), width(0), uMaxIndex(0.0f), vMaxIndex(0.0f) {}
+Texture::Texture(std::string_view path) {
+	int height, channels;
+	stbi_set_flip_vertically_on_load(1);
+	data = stbi_load(path.data(), &width, &height, &channels, 3);
+	if (data == nullptr)
+		return;
+
+	uMaxIndex = static_cast<float>(width - 1);
+	vMaxIndex = static_cast<float>(height - 1);
+}
 
 Texture::~Texture() {
 	if (data != nullptr)
 		stbi_image_free(data);
 }
 
-bool Texture::loadTexture(std::string_view path) {
-	int height, channels;
-	data = stbi_load(path.data(), &width, &height, &channels, 3);
-	if (data == nullptr)
-		return false;
+Texture::Texture(Texture&& rhs) noexcept {
+	this->data = rhs.data;
+	rhs.data = nullptr;
+	this->uMaxIndex = rhs.uMaxIndex;
+	this->vMaxIndex = rhs.vMaxIndex;
+	this->width = rhs.width;
+}
 
-	uMaxIndex = static_cast<float>(width - 1);
-	vMaxIndex = static_cast<float>(height - 1);
-	return true;
+Texture& Texture::operator=(Texture&& rhs) noexcept {
+	this->data = rhs.data;
+	rhs.data = nullptr;
+	this->uMaxIndex = rhs.uMaxIndex;
+	this->vMaxIndex = rhs.vMaxIndex;
+	this->width = rhs.width;
+	return *this;
 }
 
 bool Texture::hasTexture() const {
@@ -27,11 +42,12 @@ Eigen::Vector4f Texture::sampleTexture(const Eigen::Vector2f& uvCoordinate) cons
 	float u = uvCoordinate(0);
 	float v = uvCoordinate(1);
 	// try nearest-neighbor
-	int sampleX = static_cast<int>(roundf(u * uMaxIndex));
-	int sampleY = static_cast<int>(roundf(v * vMaxIndex));
+	int sampleX = lroundf(u * uMaxIndex);
+	int sampleY = lroundf(v * vMaxIndex);
 	uint8_t* color = data + (sampleY * width + sampleX) * 3;
-	float r = static_cast<float>(color[0]) / 255.0f;
-	float g = static_cast<float>(color[1]) / 255.0f;
-	float b = static_cast<float>(color[2]) / 255.0f;
+	// 映射到[0, 1]，再转Gamma为Linear
+	float r = std::powf(color[0] / 255.0f, 2.2f);
+	float g = std::powf(color[1] / 255.0f, 2.2f);
+	float b = std::powf(color[2] / 255.0f, 2.2f);
 	return Eigen::Vector4f(r, g, b, 0.0f);
 }
