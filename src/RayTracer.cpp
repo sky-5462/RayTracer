@@ -59,8 +59,10 @@ void RayTracer::loadModel(std::string_view modelPath,
 	bool useTexture = mesh->HasTextureCoords(0) && texturePath.has_value();
 	if (useTexture) {
 		Texture tex(texturePath.value());
-		if (!tex.hasTexture())
+		if (!tex.hasTexture()) {
 			useTexture = false;
+			std::cout << "Can't load texture in " << texturePath.value() << std::endl;
+		}
 		else
 			texturesArray.push_back(std::move(tex));
 	}
@@ -337,6 +339,8 @@ void RayTracer::parseConfigFile(std::string_view path) {
 			std::string front, back, left, right, top, bottom;
 			config >> brightness >> front >> back >> left >> right >> top >> bottom;
 			skybox.load(brightness, front, back, left, right, top, bottom);
+			if (!skybox.hasSkybox())
+				std::cout << "Can't load skybox\n";
 		}
 		else if (key == "model_start") {
 			std::string modelPath;
