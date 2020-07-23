@@ -16,12 +16,14 @@ bool AABB::hit(const Ray& r) const {
 	Eigen::Vector4f t0v = (min - r.origin).cwiseProduct(invD);
 	Eigen::Vector4f t1v = (max - r.origin).cwiseProduct(invD);
 
+	// if (invD[i] < 0) swap (t0v[i], t1v[i])
 	auto temp1 = _mm_load_ps(t0v.data());
 	auto temp2 = _mm_load_ps(t1v.data());
 	auto mask = _mm_load_ps(invD.data());
 	auto t0out = _mm_blendv_ps(temp1, temp2, mask);
 	auto t1out = _mm_blendv_ps(temp2, temp1, mask);
 
+	// Çó½»¼¯
 	float tmin = t0out.m128_f32[0];
 	float tmax = t1out.m128_f32[0];
 	for (int i = 1; i < 3; i++) {

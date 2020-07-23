@@ -1,5 +1,4 @@
 #include <RayTracer/Triangle.h>
-#include <Eigen/LU>
 #include <random>
 #include <cfloat>
 #include <array>
@@ -28,14 +27,62 @@ Eigen::Vector4f Triangle::hit(const Ray& r) const {
 	float temp = planeNormal.dot(vertexPosition(0) - r.origin);
 	float t = temp / planeNormal.dot(r.direction);
 	if (t > 0.001f) {
-		Eigen::Matrix<float, 4, 2> matrix;
-		matrix.col(0) = vertexPosition(0) - vertexPosition(2);
-		matrix.col(1) = vertexPosition(1) - vertexPosition(2);
 		Eigen::Vector4f hitPoint = r.origin + t * r.direction;
-		Eigen::Vector2f x = matrix.block<3, 2>(0, 0).fullPivLu().solve((hitPoint - vertexPosition(2)).head<3>());
-		float alpha = x(0);
-		float beta = x(1);
-		if (0.0f <= alpha && alpha <= 1.0f && 0.0f <= beta && beta <= 1.0f && alpha + beta <= 1.0f) {
+		Eigen::Vector4f a1 = vertexPosition(0) - vertexPosition(2);
+		Eigen::Vector4f a2 = vertexPosition(1) - vertexPosition(2);
+		Eigen::Vector4f b = hitPoint - vertexPosition(2);
+
+		// 完全主元法高斯消元
+		// 增广矩阵各列
+		auto matrixCol1 = _mm_load_ps(a1.data());
+		auto matrixCol2 = _mm_load_ps(a2.data());
+		auto matrixCol3 = _mm_load_ps(b.data());
+		// 矩阵转置，便于向量化操作
+		auto temp1 = _mm_unpacklo_ps(matrixCol1, matrixCol2);
+		auto temp2 = _mm_unpackhi_ps(matrixCol1, matrixCol2);
+		auto temp3 = _mm_unpacklo_ps(matrixCol3, matrixCol3);
+		auto temp4 = _mm_unpackhi_ps(matrixCol3, matrixCol3);
+		std::array<__m128, 3> matrixRow;
+		matrixRow[0] = _mm_castpd_ps(_mm_unpacklo_pd(_mm_castps_pd(temp1), _mm_castps_pd(temp3)));
+		matrixRow[1] = _mm_castpd_ps(_mm_unpackhi_pd(_mm_castps_pd(temp1), _mm_castps_pd(temp3)));
+		matrixRow[2] = _mm_castpd_ps(_mm_unpacklo_pd(_mm_castps_pd(temp2), _mm_castps_pd(temp4)));
+		// 选取第一个主元，主元列绝对值最大的一行
+		int index = 0;
+		float max = std::fabsf(matrixRow[0].m128_f32[0]);
+		if (std::fabsf(matrixRow[1].m128_f32[0]) > max) {
+			max = std::fabsf(matrixRow[1].m128_f32[0]);
+			index = 1;
+		}
+		if (std::fabsf(matrixRow[2].m128_f32[0]) > max) {
+			index = 2;
+		}
+		std::swap(matrixRow[0], matrixRow[index]);
+		// 第一行主元归一化
+		auto divisor = _mm_broadcast_ss(matrixRow[0].m128_f32);
+		matrixRow[0] = _mm_div_ps(matrixRow[0], divisor);
+		// 消去后两行的第一列
+		for (int i = 1; i < 3; ++i) {
+			auto multiplier = _mm_broadcast_ss(matrixRow[i].m128_f32);
+			matrixRow[i] = _mm_fnmadd_ps(matrixRow[0], multiplier, matrixRow[i]);
+		}
+		// 选取第二个主元
+		index = 1;
+		if (std::fabsf(matrixRow[2].m128_f32[1]) > std::fabsf(matrixRow[1].m128_f32[1])) {
+			index = 2;
+		}
+		std::swap(matrixRow[1], matrixRow[index]);
+		// 第二行主元归一化
+		divisor = _mm_broadcast_ss(&matrixRow[1].m128_f32[1]);
+		matrixRow[1] = _mm_div_ps(matrixRow[1], divisor);
+		// 不用管第三行，消去第一行的第二列
+		auto multiplier = _mm_broadcast_ss(&matrixRow[0].m128_f32[1]);
+		matrixRow[0] = _mm_fnmadd_ps(matrixRow[1], multiplier, matrixRow[0]);
+
+		// 得到结果
+		float alpha = matrixRow[0].m128_f32[2];
+		float beta = matrixRow[1].m128_f32[2];
+		bool accept = (0.0f <= alpha) & (alpha <= 1.0f) & (0.0f <= beta) & (beta <= 1.0f) & (alpha + beta <= 1.0f);
+		if (accept) {
 			return Eigen::Vector4f(alpha, beta, t, t);
 		}
 		else
