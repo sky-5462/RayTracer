@@ -17,7 +17,8 @@ private:
 	int width;
 	int height;
 	int renderNum;
-	Eigen::Array<Eigen::Vector4f, -1, -1> accumulateImg;
+	Eigen::Array<Eigen::Vector4f, -1, -1, Eigen::RowMajor> accumulateImg;
+	std::vector<uint8_t> outputBuffer;
 	std::vector<Triangle> trianglesArray;
 	std::vector<Texture> texturesArray;
 	Camera camera;

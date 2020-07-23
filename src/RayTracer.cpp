@@ -224,14 +224,15 @@ Eigen::Vector4f RayTracer::color(int depth, const Ray& r) const {
 void RayTracer::render() {
 	accumulateImg.resize(height, width);
 	accumulateImg.fill(Eigen::Vector4f::Zero());
-
-	std::vector<uint8_t> byteBuffer(width * height * 3);
+	outputBuffer.resize(width * height * 3);
 	bvh.buildTree(trianglesArray);
+
 	for (int i = 1; i <= renderNum; ++i) {
 		auto time1 = std::chrono::system_clock::now();
-		tbb::parallel_for(0, width,
-						  [this](size_t col) {
-							  for (int row = 0; row < height; ++row) {
+		// 用RowMajor方式存储，按照行切块
+		tbb::parallel_for(0, height,
+						  [this, i](size_t row) {
+							  for (int col = 0; col < width; ++col) {
 								  const auto& ray = camera.getRay(col, row);
 
 								  Eigen::Vector4f temp = Eigen::Vector4f::Zero();
@@ -239,27 +240,21 @@ void RayTracer::render() {
 									  temp += color(0, r);
 								  }
 								  accumulateImg(row, col) += temp * 0.25f;
+
+								  for (int k = 0; k < 3; ++k) {
+									  float averaged = accumulateImg(row, col)(k) / i;
+									  float gammaCorrected = powf(averaged, 1.0f / 2.2f);
+									  int clipNum = lroundf(gammaCorrected * 255.0f);
+									  if (clipNum > 255)
+										  clipNum = 255;
+									  if (clipNum < 0)
+										  clipNum = 0;
+
+									  outputBuffer[(row * width + col) * 3 + k] = clipNum;
+								  }
 							  }
 						  });
-
 		auto time2 = std::chrono::system_clock::now();
-
-		// 进行Gamma映射，再映射到[0, 255]
-		for (int col = 0; col < width; ++col) {
-			for (int row = 0; row < height; ++row) {
-				for (int k = 0; k < 3; ++k) {
-					float averaged = accumulateImg(row, col)(k) / i;
-					float gammaCorrected = powf(averaged, 1.0f / 2.2f);
-					int temp = lroundf(gammaCorrected * 255.0f);
-					if (temp > 255)
-						temp = 255;
-					else if (temp < 0)
-						temp = 0;
-
-					byteBuffer[(row * width + col) * 3 + k] = temp;
-				}
-			}
-		}
 
 		std::stringstream str;
 		str << "out_";
@@ -267,7 +262,7 @@ void RayTracer::render() {
 		str.width(3);
 		str << i;
 		str << ".png";
-		stbi_write_png(str.str().c_str(), width, height, 3, byteBuffer.data(), 3 * width);
+		stbi_write_png(str.str().c_str(), width, height, 3, outputBuffer.data(), 3 * width);
 
 		std::cout << "Output frame " << i << ", use " << std::chrono::duration<float>(time2 - time1).count() << "s\n";
 	}

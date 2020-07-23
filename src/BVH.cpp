@@ -159,13 +159,13 @@ void BVH::buildTree(const std::vector<Triangle>& triangles) {
 	}
 }
 
-std::vector<int> BVH::hit(const Ray& r) const {
-	// 预留空间，减少空间分配开销
-	std::vector<int> result;
-	result.reserve(linearTree.size() / 4);
+const std::vector<int>& BVH::hit(const Ray& r) const {
+	// 静态作用域，减少空间分配开销
+	thread_local static std::vector<int> result;
 
 	// 栈空间做递归栈，32层足够上亿个节点了
 	std::array<int, 32> stack = { 0 };
+	result.clear();
 	int stackSize = 1;
 	do {
 		int nodeIndex = stack[stackSize - 1];

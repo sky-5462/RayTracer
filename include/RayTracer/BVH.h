@@ -47,7 +47,7 @@ public:
 	void buildTree(const std::vector<Triangle>& triangles);
 
 	// 返回命中的三角形的索引列表
-	std::vector<int> hit(const Ray& r) const;
+	const std::vector<int>& hit(const Ray& r) const;
 
 private:
 	std::vector<LinearNode> linearTree;
