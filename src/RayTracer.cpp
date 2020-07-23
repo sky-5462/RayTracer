@@ -56,18 +56,21 @@ void RayTracer::loadModel(std::string_view modelPath,
 	auto finalColor = color.has_value() ? color.value() : Eigen::Vector4f(colorTemp.r, colorTemp.g, colorTemp.b, 0.0f);
 
 	// 确定是否存在纹理
-	bool useTexture = mesh->HasTextureCoords(0) && texturePath.has_value();
+	bool useTexture = texturePath.has_value();
 	if (useTexture) {
-		Texture tex(texturePath.value());
-		if (!tex.hasTexture()) {
-			useTexture = false;
-			std::cout << "Can't load texture in " << texturePath.value() << std::endl;
+		useTexture = mesh->HasTextureCoords(0);
+		if (useTexture) {
+			Texture tex(texturePath.value());
+			if (!tex.hasTexture()) {
+				useTexture = false;
+				std::cout << "Can't load texture in " << texturePath.value() << std::endl;
+			}
+			else
+				texturesArray.push_back(std::move(tex));
 		}
-		else
-			texturesArray.push_back(std::move(tex));
+		if (!useTexture)
+			std::cout << "No texture for model in " << modelPath << std::endl;
 	}
-	if (!useTexture)
-		std::cout << "No texture for model in " << modelPath << std::endl;
 
 	unsigned faceNum = mesh->mNumFaces;
 	trianglesArray.reserve(faceNum + trianglesArray.size());
