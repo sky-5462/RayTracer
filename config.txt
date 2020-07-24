@@ -24,6 +24,8 @@ model_start
 model_path path
 // 纹理的路径，没有就填no
 texture_path path
+// 缩放系数
+scale 1
 // 模型放入场景的位置
 position_offset 0 0 0
 // 是否为金属

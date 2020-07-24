@@ -36,6 +36,7 @@ private:
 
 	void loadModel(std::string_view modelPath,
 				   const Eigen::Vector4f& origin,
+				   float scale,
 				   bool isMetal,
 				   bool isLightEmitting,
 				   bool isTransparent,

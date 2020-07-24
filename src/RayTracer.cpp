@@ -19,6 +19,7 @@
 
 void RayTracer::loadModel(std::string_view modelPath,
 						  const Eigen::Vector4f& origin,
+						  float scale,
 						  bool isMetal,
 						  bool isLightEmitting,
 						  bool isTransparent,
@@ -81,7 +82,7 @@ void RayTracer::loadModel(std::string_view modelPath,
 			unsigned index = face.mIndices[k];
 
 			const auto& vertex = mesh->mVertices[index];
-			tri.vertexPosition(k) = Eigen::Vector4f(vertex.x, vertex.y, vertex.z, 0.0f) + origin;
+			tri.vertexPosition(k) = Eigen::Vector4f(vertex.x, vertex.y, vertex.z, 0.0f) * scale + origin;
 
 			const auto& normal = mesh->mNormals[index];
 			tri.vertexNormal(k) = Eigen::Vector4f(normal.x, normal.y, normal.z, 0.0f);
@@ -356,6 +357,13 @@ void RayTracer::parseConfigFile(std::string_view path) {
 			if (texturePath == "no")
 				texPathOptional.reset();
 
+			float scale;
+			if (config >> key && key == "scale") {
+				config >> scale;
+			}
+			else
+				throw std::exception("Can't parse \"scale\"");
+
 			Eigen::Vector4f origin;
 			if (config >> key && key == "position_offset") {
 				float x, y, z;
@@ -405,7 +413,8 @@ void RayTracer::parseConfigFile(std::string_view path) {
 				config >> key;
 			}
 			if (key == "model_end") {
-				loadModel(modelPath, origin, isMetal, isLightEmitting, isTransparent, specularRoughness, refIndex,
+				loadModel(modelPath, origin, 
+						  scale, isMetal, isLightEmitting, isTransparent, specularRoughness, refIndex,
 						  texPathOptional, color);
 				continue;
 			}
